@@ -13,7 +13,7 @@ let tables = [];
 let settings = {};
 let taxes = [];
 let backups = [];
-let adminPinStatus = { has_pin: false };
+let roleStatus = { waiter: false, kitchen: false, admin: false };
 
 export async function init(container) {
   root = container;
@@ -40,14 +40,14 @@ export async function init(container) {
 
 export async function refresh() {
   if (!root) return;
-  [categories, items, tables, settings, taxes, backups, adminPinStatus] = await Promise.all([
+  [categories, items, tables, settings, taxes, backups, roleStatus] = await Promise.all([
     api.categories.list(),
     api.items.list(),
     api.tables.list(),
     api.settings.get(),
     api.taxes.list(),
     api.backups.list(),
-    api.adminPin.status(),
+    api.auth.status(),
   ]);
   renderMenu();
   renderTables();
@@ -338,18 +338,22 @@ function renderSettings() {
            </table>`
     }
 
-    <div class="section-title">Admin PIN</div>
-    ${
-      adminPinStatus.has_pin
-        ? '<div class="empty-hint">A PIN is currently required to open this Admin screen.</div>'
-        : '<div class="empty-hint">No PIN set — this Admin screen is open to anyone. Set one to keep staff/customers out of settings.</div>'
-    }
-    <div class="form-row">
-      <input id="adminPinNew" type="password" inputmode="numeric" autocomplete="off" placeholder="New PIN" style="width:120px" />
-      <input id="adminPinConfirm" type="password" inputmode="numeric" autocomplete="off" placeholder="Confirm PIN" style="width:120px" />
-      <button class="btn primary" id="savePinBtn">${adminPinStatus.has_pin ? 'Change PIN' : 'Set PIN'}</button>
-      ${adminPinStatus.has_pin ? '<button class="btn danger" id="removePinBtn">Remove PIN</button>' : ''}
-    </div>
+    <div class="section-title">Staff PINs</div>
+    <div class="empty-hint">Everyone signs in with a role (Waiter/Kitchen/Admin). A role with no PIN set signs in with just a click — set one here to require it.</div>
+    ${['waiter', 'kitchen', 'admin']
+      .map((role) => {
+        const label = role[0].toUpperCase() + role.slice(1);
+        const hasPin = roleStatus[role];
+        return `
+        <div class="form-row" data-role="${role}">
+          <strong style="width:80px">${label}</strong>
+          <span class="empty-hint" style="width:110px">${hasPin ? 'PIN set' : 'No PIN'}</span>
+          <input class="role-pin-new" type="password" inputmode="numeric" autocomplete="off" placeholder="New PIN" style="width:110px" />
+          <button class="btn primary role-pin-save">${hasPin ? 'Change' : 'Set'} PIN</button>
+          ${hasPin ? '<button class="btn danger role-pin-remove">Remove</button>' : ''}
+        </div>`;
+      })
+      .join('')}
   `;
 
   panel.querySelector('#backupNowBtn').addEventListener('click', async () => {
@@ -362,35 +366,32 @@ function renderSettings() {
     }
   });
 
-  panel.querySelector('#savePinBtn').addEventListener('click', async () => {
-    const pin = panel.querySelector('#adminPinNew').value;
-    const confirmPin = panel.querySelector('#adminPinConfirm').value;
-    if (pin.length < 4) {
-      toast('PIN must be at least 4 digits', true);
-      return;
-    }
-    if (pin !== confirmPin) {
-      toast('PINs do not match', true);
-      return;
-    }
-    try {
-      await api.adminPin.set(pin);
-      await refresh();
-      toast('PIN saved');
-    } catch (err) {
-      toast(err.message, true);
-    }
-  });
-
-  panel.querySelector('#removePinBtn')?.addEventListener('click', async () => {
-    if (!window.confirm('Remove the Admin PIN? Anyone will be able to open this screen.')) return;
-    try {
-      await api.adminPin.set(null);
-      await refresh();
-      toast('PIN removed');
-    } catch (err) {
-      toast(err.message, true);
-    }
+  panel.querySelectorAll('[data-role]').forEach((row) => {
+    const role = row.dataset.role;
+    row.querySelector('.role-pin-save').addEventListener('click', async () => {
+      const pin = row.querySelector('.role-pin-new').value;
+      if (pin.length < 4) {
+        toast('PIN must be at least 4 digits', true);
+        return;
+      }
+      try {
+        await api.auth.setPin(role, pin);
+        await refresh();
+        toast(`${role} PIN saved`);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    row.querySelector('.role-pin-remove')?.addEventListener('click', async () => {
+      if (!window.confirm(`Remove the ${role} PIN? That role will sign in with just a click.`)) return;
+      try {
+        await api.auth.setPin(role, null);
+        await refresh();
+        toast(`${role} PIN removed`);
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
   });
 
   panel.querySelector('#savePrinterBtn').addEventListener('click', async () => {

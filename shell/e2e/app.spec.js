@@ -53,37 +53,42 @@ test.describe('DineForge POS smoke test', () => {
 
     await window.getByRole('button', { name: 'Start blank' }).click();
 
-    await expect(window.locator('#setupWizard')).toBeEmpty();
+    // Everyone signs in with a role after setup, including the local
+    // terminal — no PIN was configured for Admin during the wizard above, so
+    // this is a one-click login. Admin has full access (waiter + kitchen +
+    // admin), which is what the next test needs.
+    await expect(window.locator('#roleLogin')).not.toBeEmpty();
+    await window.locator('.role-btn[data-role="admin"]').click();
+    await window.getByRole('button', { name: 'Sign In' }).click();
+
+    await expect(window.locator('#roleLogin')).toBeEmpty();
     await expect(window.getByRole('button', { name: 'New Order' })).toBeVisible();
   });
 
   test('full order lifecycle: create, add item, send to kitchen, pay, attempt receipt print', async () => {
     const apiBase = await window.evaluate(() => window.dineforge.getApiBase());
-
-    // Skip the first-run setup wizard so it doesn't block the UI this test drives.
-    await fetch(`${apiBase}/api/settings`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setup_completed: '1' }),
-    });
+    // Reuses the admin session the previous test signed in with —
+    // sessionStorage survives across tests in this same window/tab.
+    const token = await window.evaluate(() => JSON.parse(sessionStorage.getItem('dineforge_session')).token);
+    const authHeaders = { 'Content-Type': 'application/json', 'X-Session-Token': token };
 
     const category = await (
       await fetch(`${apiBase}/api/menu/categories`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({ name: 'E2E Category' }),
       })
     ).json();
 
     await fetch(`${apiBase}/api/menu/items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ category_id: category.id, name: 'E2E Burger', price_cents: 999 }),
     });
 
     await fetch(`${apiBase}/api/shifts/open`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders,
       body: JSON.stringify({ opening_cash_cents: 10000 }),
     });
 

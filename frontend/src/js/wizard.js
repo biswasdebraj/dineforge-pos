@@ -1,4 +1,4 @@
-import { api, toast, escapeHtml } from './api.js';
+import { api, toast, escapeHtml, setSession, clearSession } from './api.js';
 
 const TOTAL_STEPS = 4;
 
@@ -184,7 +184,16 @@ async function finishWizard(overlay, state, finish) {
     <p class="wizard-subtitle">Just a moment.</p>
   `);
 
+  // Nearly everything below (settings, tax, menu, pins) is admin-guarded,
+  // but nobody has logged in yet at this point in a fresh install — the
+  // wizard runs before role login. No PIN exists yet either, so admin login
+  // with a blank PIN is guaranteed to succeed (see AuthService::login).
+  // Bootstrap a session just long enough to run setup, then clear it again
+  // so the user still goes through proper role login afterward.
   try {
+    const bootstrap = await api.auth.login('admin', '');
+    setSession(bootstrap.token, 'admin');
+
     await api.settings.update({
       restaurant_name: state.restaurant_name,
       currency_symbol: state.currency_symbol,
@@ -206,7 +215,7 @@ async function finishWizard(overlay, state, finish) {
     }
 
     if (state.admin_pin) {
-      await api.adminPin.set(state.admin_pin);
+      await api.auth.setPin('admin', state.admin_pin);
     }
 
     if (state.addSampleMenu) {
@@ -217,6 +226,7 @@ async function finishWizard(overlay, state, finish) {
   } catch (err) {
     toast(`Setup error: ${err.message}`, true);
   } finally {
+    clearSession();
     finish();
   }
 }

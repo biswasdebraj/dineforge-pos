@@ -17,18 +17,64 @@ function qs(params) {
   return s ? `?${s}` : '';
 }
 
+// Session lives in sessionStorage: cleared when the tab/app process ends,
+// which matches "log in for your shift" semantics better than a persistent
+// login. A device relogging in after a restart is expected, not a bug.
+const SESSION_KEY = 'dineforge_session';
+
+export function getSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (!session.token || !session.expiresAt || Date.now() >= session.expiresAt) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return session;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setSession(token, role, hoursValid = 12) {
+  const session = { token, role, expiresAt: Date.now() + hoursValid * 3600 * 1000 };
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  } catch (e) {
+    // Storage disabled — session just won't survive a reload.
+  }
+  return session;
+}
+
+export function clearSession() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch (e) {
+    // Ignore.
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const base = await getApiBase();
-  const res = await fetch(`${base}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  const session = getSession();
+  const headers = { 'Content-Type': 'application/json' };
+  if (session) {
+    headers['X-Session-Token'] = session.token;
+  }
+
+  const res = await fetch(`${base}${path}`, { headers, ...options });
 
   let data = null;
   try {
     data = await res.json();
   } catch (_) {
     data = null;
+  }
+
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    clearSession();
+    window.dispatchEvent(new CustomEvent('dineforge:unauthorized'));
   }
 
   if (!res.ok) {
@@ -45,10 +91,11 @@ export const api = {
     get: () => apiFetch('/api/settings'),
     update: (body) => apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
   },
-  adminPin: {
-    status: () => apiFetch('/api/admin-pin/status'),
-    verify: (pin) => apiFetch('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin }) }),
-    set: (pin) => apiFetch('/api/admin-pin', { method: 'PUT', body: JSON.stringify({ pin }) }),
+  auth: {
+    status: () => apiFetch('/api/auth/status'),
+    login: (role, pin) => apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ role, pin }) }),
+    logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+    setPin: (role, pin) => apiFetch('/api/auth/pins', { method: 'PUT', body: JSON.stringify({ role, pin }) }),
   },
   taxes: {
     list: () => apiFetch('/api/taxes'),

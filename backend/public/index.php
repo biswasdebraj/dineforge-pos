@@ -5,12 +5,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/../src/support/response.php';
 require_once __DIR__ . '/../src/support/router.php';
 require_once __DIR__ . '/../src/support/audit.php';
+require_once __DIR__ . '/../src/support/guard.php';
 require_once __DIR__ . '/../src/db/connection.php';
 require_once __DIR__ . '/../src/services/MenuService.php';
 require_once __DIR__ . '/../src/services/ShiftService.php';
 require_once __DIR__ . '/../src/services/OrderService.php';
 require_once __DIR__ . '/../src/services/SettingsService.php';
 require_once __DIR__ . '/../src/services/BackupService.php';
+require_once __DIR__ . '/../src/services/AuthService.php';
 
 $pdo = get_db_connection();
 $menuService = new MenuService($pdo);
@@ -18,6 +20,7 @@ $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
 $settingsService = new SettingsService($pdo);
 $backupService = new BackupService($pdo, get_data_dir() . '/backups');
+$authService = new AuthService($pdo);
 
 $router = new Router();
 
@@ -34,20 +37,55 @@ $router->get('/api/ping', function () use ($pdo) {
     ]);
 });
 
-// Menu categories
+// Auth — role login (Waiter/Kitchen/Admin), required by every device
+// (local terminal and LAN devices alike) before touching anything else.
+$router->get('/api/auth/status', function () use ($authService) {
+    json_response($authService->status());
+});
+$router->post('/api/auth/login', function () use ($authService) {
+    $input = json_body();
+    $role = (string) ($input['role'] ?? '');
+    $pin = (string) ($input['pin'] ?? '');
+    try {
+        $token = $authService->login($role, $pin);
+    } catch (InvalidArgumentException $e) {
+        json_error($e->getMessage(), 422);
+    }
+    if ($token === null) {
+        json_error('Incorrect PIN', 401);
+    }
+    json_response(['token' => $token, 'role' => $role]);
+});
+$router->post('/api/auth/logout', function () use ($authService) {
+    $token = $_SERVER['HTTP_X_SESSION_TOKEN'] ?? null;
+    if ($token !== null) {
+        $authService->logout($token);
+    }
+    json_response(['status' => 'ok']);
+});
+$router->put('/api/auth/pins', guarded($authService, ['admin'], function () use ($authService) {
+    $input = json_body();
+    $role = (string) ($input['role'] ?? '');
+    $pin = isset($input['pin']) && $input['pin'] !== '' ? (string) $input['pin'] : null;
+    $authService->setPin($role, $pin);
+    json_response($authService->status());
+}));
+
+// Menu categories — reads are public (menu/prices aren't sensitive and are
+// needed to render before login), writes are admin-only.
 $router->get('/api/menu/categories', function () use ($menuService) {
     json_response($menuService->listCategories());
 });
-$router->post('/api/menu/categories', function () use ($menuService) {
+$router->post('/api/menu/categories', guarded($authService, ['admin'], function () use ($menuService) {
     json_response($menuService->createCategory(json_body()), 201);
-});
-$router->put('/api/menu/categories/{id}', function (array $p) use ($menuService) {
+}));
+$router->put('/api/menu/categories/{id}', guarded($authService, ['admin'], function (array $p) use ($menuService) {
     json_response($menuService->updateCategory((int) $p['id'], json_body()));
-});
-$router->delete('/api/menu/categories/{id}', function (array $p) use ($menuService) {
+}));
+$router->delete('/api/menu/categories/{id}', guarded($authService, ['admin'], function (array $p) use ($menuService) {
     $menuService->deleteCategory((int) $p['id']);
     json_response(['status' => 'ok']);
-});
+}));
 
 // Menu items
 $router->get('/api/menu/items', function () use ($menuService) {
@@ -56,22 +94,22 @@ $router->get('/api/menu/items', function () use ($menuService) {
     $sku = isset($_GET['sku']) ? (string) $_GET['sku'] : null;
     json_response($menuService->listItems($categoryId, $activeOnly, $sku));
 });
-$router->post('/api/menu/items', function () use ($menuService) {
+$router->post('/api/menu/items', guarded($authService, ['admin'], function () use ($menuService) {
     json_response($menuService->createItem(json_body()), 201);
-});
-$router->put('/api/menu/items/{id}', function (array $p) use ($menuService) {
+}));
+$router->put('/api/menu/items/{id}', guarded($authService, ['admin'], function (array $p) use ($menuService) {
     json_response($menuService->updateItem((int) $p['id'], json_body()));
-});
-$router->delete('/api/menu/items/{id}', function (array $p) use ($menuService) {
+}));
+$router->delete('/api/menu/items/{id}', guarded($authService, ['admin'], function (array $p) use ($menuService) {
     $menuService->deleteItem((int) $p['id']);
     json_response(['status' => 'ok']);
-});
+}));
 
 // Dining tables
 $router->get('/api/tables', function () use ($pdo) {
     json_response($pdo->query('SELECT * FROM dining_tables ORDER BY label')->fetchAll());
 });
-$router->post('/api/tables', function () use ($pdo) {
+$router->post('/api/tables', guarded($authService, ['admin'], function () use ($pdo) {
     $input = json_body();
     $stmt = $pdo->prepare('INSERT INTO dining_tables (label, seats, pos_x, pos_y) VALUES (:label, :seats, :pos_x, :pos_y)');
     $stmt->execute([
@@ -84,8 +122,8 @@ $router->post('/api/tables', function () use ($pdo) {
     $stmt = $pdo->prepare('SELECT * FROM dining_tables WHERE id = :id');
     $stmt->execute(['id' => $id]);
     json_response($stmt->fetch(), 201);
-});
-$router->put('/api/tables/{id}', function (array $p) use ($pdo) {
+}));
+$router->put('/api/tables/{id}', guarded($authService, ['admin'], function (array $p) use ($pdo) {
     $input = json_body();
     $stmt = $pdo->prepare('UPDATE dining_tables SET label = COALESCE(:label, label), seats = COALESCE(:seats, seats), status = COALESCE(:status, status) WHERE id = :id');
     $stmt->execute([
@@ -97,17 +135,17 @@ $router->put('/api/tables/{id}', function (array $p) use ($pdo) {
     $stmt = $pdo->prepare('SELECT * FROM dining_tables WHERE id = :id');
     $stmt->execute(['id' => (int) $p['id']]);
     json_response($stmt->fetch());
-});
+}));
 
 // Shifts
-$router->get('/api/shifts/current', function () use ($shiftService) {
+$router->get('/api/shifts/current', guarded($authService, ['waiter', 'admin'], function () use ($shiftService) {
     $shift = $shiftService->getCurrent();
     json_response($shift ?? ['status' => 'none']);
-});
-$router->post('/api/shifts/open', function () use ($shiftService) {
+}));
+$router->post('/api/shifts/open', guarded($authService, ['waiter', 'admin'], function () use ($shiftService) {
     json_response($shiftService->open(json_body()), 201);
-});
-$router->post('/api/shifts/{id}/close', function (array $p) use ($shiftService, $backupService) {
+}));
+$router->post('/api/shifts/{id}/close', guarded($authService, ['waiter', 'admin'], function (array $p) use ($shiftService, $backupService) {
     $result = $shiftService->close((int) $p['id'], json_body());
     try {
         $backupService->create('shift-close');
@@ -116,95 +154,81 @@ $router->post('/api/shifts/{id}/close', function (array $p) use ($shiftService, 
         error_log('Backup after shift close failed: ' . $e->getMessage());
     }
     json_response($result);
-});
+}));
 
-// Backups
-$router->get('/api/backups', function () use ($backupService) {
+// Backups — admin only
+$router->get('/api/backups', guarded($authService, ['admin'], function () use ($backupService) {
     json_response($backupService->list());
-});
-$router->post('/api/backups', function () use ($backupService) {
+}));
+$router->post('/api/backups', guarded($authService, ['admin'], function () use ($backupService) {
     json_response($backupService->create('manual'), 201);
-});
+}));
 
 // Settings
 $router->get('/api/settings', function () use ($settingsService) {
     json_response($settingsService->all());
 });
-$router->put('/api/settings', function () use ($settingsService) {
+$router->put('/api/settings', guarded($authService, ['admin'], function () use ($settingsService) {
     json_response($settingsService->update(json_body()));
-});
-
-// Admin PIN gate (UI-level lock on the Admin screen, not API auth — see
-// project docs; the backend only ever listens on 127.0.0.1)
-$router->get('/api/admin-pin/status', function () use ($settingsService) {
-    json_response(['has_pin' => $settingsService->hasAdminPin()]);
-});
-$router->post('/api/admin-pin/verify', function () use ($settingsService) {
-    $input = json_body();
-    json_response(['valid' => $settingsService->verifyAdminPin((string) ($input['pin'] ?? ''))]);
-});
-$router->put('/api/admin-pin', function () use ($settingsService) {
-    $input = json_body();
-    $pin = isset($input['pin']) && $input['pin'] !== '' ? (string) $input['pin'] : null;
-    $settingsService->setAdminPin($pin);
-    json_response(['has_pin' => $settingsService->hasAdminPin()]);
-});
+}));
 
 // Taxes
 $router->get('/api/taxes', function () use ($settingsService) {
     json_response($settingsService->listTaxes());
 });
-$router->put('/api/taxes/{id}', function (array $p) use ($settingsService) {
+$router->put('/api/taxes/{id}', guarded($authService, ['admin'], function (array $p) use ($settingsService) {
     json_response($settingsService->updateTax((int) $p['id'], json_body()));
-});
+}));
 
-// Orders
-$router->get('/api/orders', function () use ($orderService) {
+// Orders — reads shared across all roles (Waiter/Kitchen both need order
+// state); item-status transitions are Kitchen's job; everything else that
+// mutates an order is Waiter's.
+$router->get('/api/orders', guarded($authService, ['waiter', 'kitchen', 'admin'], function () use ($orderService) {
     $full = isset($_GET['full']) && $_GET['full'] === '1';
     json_response($full ? $orderService->listFull($_GET['status'] ?? null) : $orderService->list($_GET['status'] ?? null));
-});
-$router->post('/api/orders', function () use ($orderService) {
+}));
+$router->post('/api/orders', guarded($authService, ['waiter', 'admin'], function () use ($orderService) {
     json_response($orderService->create(json_body()), 201);
-});
-$router->get('/api/orders/{id}', function (array $p) use ($orderService) {
+}));
+$router->get('/api/orders/{id}', guarded($authService, ['waiter', 'kitchen', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->getFull((int) $p['id']));
-});
-$router->post('/api/orders/{id}/items', function (array $p) use ($orderService) {
+}));
+$router->post('/api/orders/{id}/items', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->addItem((int) $p['id'], json_body()), 201);
-});
-$router->put('/api/orders/{id}/items/{itemId}', function (array $p) use ($orderService) {
+}));
+$router->put('/api/orders/{id}/items/{itemId}', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->updateItem((int) $p['id'], (int) $p['itemId'], json_body()));
-});
-$router->delete('/api/orders/{id}/items/{itemId}', function (array $p) use ($orderService) {
+}));
+$router->delete('/api/orders/{id}/items/{itemId}', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->voidItem((int) $p['id'], (int) $p['itemId']));
-});
-$router->put('/api/orders/{id}/items/{itemId}/status', function (array $p) use ($orderService) {
+}));
+$router->put('/api/orders/{id}/items/{itemId}/status', guarded($authService, ['kitchen', 'admin'], function (array $p) use ($orderService) {
     $input = json_body();
     json_response($orderService->updateItemStatus((int) $p['id'], (int) $p['itemId'], (string) ($input['status'] ?? '')));
-});
-$router->post('/api/orders/{id}/discounts', function (array $p) use ($orderService) {
+}));
+$router->post('/api/orders/{id}/discounts', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->applyDiscount((int) $p['id'], json_body()), 201);
-});
-$router->delete('/api/orders/{id}/discounts/{discountId}', function (array $p) use ($orderService) {
+}));
+$router->delete('/api/orders/{id}/discounts/{discountId}', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->removeDiscount((int) $p['id'], (int) $p['discountId']));
-});
-$router->post('/api/orders/{id}/send', function (array $p) use ($orderService) {
+}));
+$router->post('/api/orders/{id}/send', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->sendToKitchen((int) $p['id']));
-});
-$router->put('/api/orders/{id}/customer', function (array $p) use ($orderService) {
+}));
+$router->put('/api/orders/{id}/customer', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     $input = json_body();
     json_response($orderService->updateCustomerName((int) $p['id'], $input['customer_name'] ?? null));
-});
-$router->post('/api/orders/{id}/void', function (array $p) use ($orderService) {
+}));
+$router->post('/api/orders/{id}/void', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->voidOrder((int) $p['id']));
-});
-$router->post('/api/orders/{id}/payments', function (array $p) use ($orderService) {
+}));
+$router->post('/api/orders/{id}/payments', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->recordPayment((int) $p['id'], json_body()), 201);
-});
+}));
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-Session-Token');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);

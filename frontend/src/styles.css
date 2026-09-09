@@ -47,6 +47,15 @@
 
 * { box-sizing: border-box; }
 
+/* This codebase toggles visibility via the `hidden` DOM property in several
+   places. An author-stylesheet rule that sets `display` unconditionally on
+   the same element always wins over the browser's default
+   `[hidden] { display: none }`, regardless of selector specificity — that
+   bug has recurred multiple times here as new components were added. This
+   is the systemic fix: `hidden` always wins, permanently, for every
+   element, present and future. */
+[hidden] { display: none !important; }
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -78,7 +87,7 @@ button { font-family: inherit; }
 }
 .tab.active { background: var(--accent); color: white; }
 .theme-toggle { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
-.shift-status { font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+.shift-status:not([hidden]) { font-size: 0.85rem; display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
 .shift-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); display: inline-block; }
 .shift-dot.open { background: var(--success); }
 
@@ -171,7 +180,7 @@ main#views { flex: 1; overflow: hidden; position: relative; }
 table.data-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
 table.data-table th, table.data-table td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); }
 table.data-table th { color: var(--text-dim); font-weight: 600; font-size: 0.85rem; }
-.form-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center; }
+.form-row:not([hidden]) { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; align-items: center; }
 .form-row input, .form-row select {
   background: var(--panel-alt); color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.4rem 0.6rem;
@@ -208,5 +217,13 @@ table.data-table th { color: var(--text-dim); font-weight: 600; font-size: 0.85r
 .wizard-subtitle { color: var(--text-dim); text-align: center; margin: 0 0 1.5rem; }
 .wizard-card .form-row { flex-direction: column; align-items: stretch; margin-bottom: 1rem; }
 .wizard-card .form-row label { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.25rem; }
-.wizard-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 0.5rem; }
+.wizard-actions:not([hidden]) { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 0.5rem; }
 .wizard-actions .spacer { flex: 1; }
+
+.role-picker { display: flex; flex-direction: column; gap: 0.75rem; }
+.role-btn {
+  padding: 1rem; font-size: 1.05rem; display: flex; align-items: center; justify-content: space-between;
+}
+.role-btn.active { border-color: var(--accent); color: var(--accent); }
+.role-pin-hint { font-size: 0.75rem; color: var(--text-dim); font-weight: normal; }
+.role-btn.active .role-pin-hint { color: var(--accent); }

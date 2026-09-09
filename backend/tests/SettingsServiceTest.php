@@ -15,48 +15,6 @@ final class SettingsServiceTest extends TestCase
         $this->assertSame('€', $all['currency_symbol']);
     }
 
-    public function testNoAdminPinByDefault(): void
-    {
-        $settings = new SettingsService($this->pdo);
-
-        $this->assertFalse($settings->hasAdminPin());
-        $this->assertTrue($settings->verifyAdminPin('anything')); // open when unset
-    }
-
-    public function testSetVerifyAndRemoveAdminPin(): void
-    {
-        $settings = new SettingsService($this->pdo);
-        $settings->setAdminPin('1234');
-
-        $this->assertTrue($settings->hasAdminPin());
-        $this->assertTrue($settings->verifyAdminPin('1234'));
-        $this->assertFalse($settings->verifyAdminPin('9999'));
-
-        $settings->setAdminPin(null);
-        $this->assertFalse($settings->hasAdminPin());
-        $this->assertTrue($settings->verifyAdminPin('anything'));
-    }
-
-    public function testAdminPinHashNeverExposedViaAll(): void
-    {
-        $settings = new SettingsService($this->pdo);
-        $settings->setAdminPin('1234');
-
-        $all = $settings->all();
-
-        $this->assertArrayNotHasKey('admin_pin_hash', $all);
-    }
-
-    public function testUpdateCannotOverwriteAdminPinHash(): void
-    {
-        $settings = new SettingsService($this->pdo);
-        $settings->setAdminPin('1234');
-
-        $settings->update(['admin_pin_hash' => 'not-a-real-hash']);
-
-        $this->assertTrue($settings->verifyAdminPin('1234')); // unchanged
-    }
-
     public function testUpdateTaxAndSetDefault(): void
     {
         $settings = new SettingsService($this->pdo);

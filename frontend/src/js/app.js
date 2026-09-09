@@ -1,16 +1,28 @@
-import { api, money, toast, showModal, closeModal } from './api.js';
+import { api, money, toast, showModal, closeModal, clearSession } from './api.js';
 import * as posView from './pos.js';
 import * as kitchenView from './kitchen.js';
 import * as adminView from './admin.js';
 import * as wizard from './wizard.js';
+import * as login from './login.js';
 
 const views = { pos: posView, kitchen: kitchenView, admin: adminView };
+
+// Which nav tabs (and therefore which view modules get initialized at all)
+// each role can see. Admin is the superset role — full operational access,
+// not just back-office.
+const ROLE_TABS = {
+  waiter: ['pos'],
+  kitchen: ['kitchen'],
+  admin: ['pos', 'kitchen', 'admin'],
+};
+
 let activeView = 'pos';
 let currentShift = null;
-let adminUnlocked = false;
+let currentRole = null;
 
 const shiftStatusEl = document.getElementById('shiftStatus');
 const themeToggleEl = document.getElementById('themeToggle');
+const logoutBtnEl = document.getElementById('logoutBtn');
 
 function currentTheme() {
   return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
@@ -39,6 +51,10 @@ function initTheme() {
 
 async function boot() {
   window.dineforge?.onBackendRestarted?.(() => boot());
+  window.addEventListener('dineforge:unauthorized', () => {
+    toast('Session expired — please sign in again', true);
+    window.location.reload();
+  });
 
   initTheme();
 
@@ -47,6 +63,21 @@ async function boot() {
   } catch (err) {
     toast(`Setup wizard error: ${err.message}`, true);
   }
+
+  currentRole = await login.ensureLoggedIn();
+  const allowedTabs = ROLE_TABS[currentRole] || [];
+
+  logoutBtnEl.hidden = false;
+  logoutBtnEl.textContent = `Log Out (${currentRole[0].toUpperCase()}${currentRole.slice(1)})`;
+  logoutBtnEl.addEventListener('click', onLogout);
+
+  document.querySelectorAll('.tab').forEach((btn) => {
+    const allowed = allowedTabs.includes(btn.dataset.view);
+    btn.hidden = !allowed;
+    if (allowed) {
+      btn.addEventListener('click', () => switchView(btn.dataset.view));
+    }
+  });
 
   let settings;
   try {
@@ -58,16 +89,21 @@ async function boot() {
 
   const ctx = { currencySymbol: settings.currency_symbol || '$' };
 
-  document.querySelectorAll('.tab').forEach((btn) => {
-    btn.addEventListener('click', () => onTabClick(btn.dataset.view));
-  });
+  if (allowedTabs.includes('pos') || allowedTabs.includes('kitchen')) {
+    await refreshShiftStatus();
+    shiftStatusEl.addEventListener('click', onShiftStatusClick);
+  } else {
+    shiftStatusEl.hidden = true;
+  }
 
-  await refreshShiftStatus();
-  shiftStatusEl.addEventListener('click', onShiftStatusClick);
+  // Only initialize (and poll) the views this role can actually reach — an
+  // uninitialized view's admin/kitchen-only API calls would otherwise 403
+  // for a role that isn't allowed to make them.
+  if (allowedTabs.includes('pos')) await posView.init(document.getElementById('view-pos'), ctx);
+  if (allowedTabs.includes('kitchen')) await kitchenView.init(document.getElementById('view-kitchen'));
+  if (allowedTabs.includes('admin')) await adminView.init(document.getElementById('view-admin'));
 
-  await posView.init(document.getElementById('view-pos'), ctx);
-  await kitchenView.init(document.getElementById('view-kitchen'));
-  await adminView.init(document.getElementById('view-admin'));
+  switchView(allowedTabs[0] || 'pos');
 
   setInterval(() => {
     // Admin is a low-frequency back-office screen edited by one person at a
@@ -76,68 +112,20 @@ async function boot() {
     if (activeView !== 'admin') {
       views[activeView]?.refresh?.();
     }
-    refreshShiftStatus();
+    if (allowedTabs.includes('pos') || allowedTabs.includes('kitchen')) {
+      refreshShiftStatus();
+    }
   }, 8000);
 }
 
-async function onTabClick(name) {
-  if (name === 'admin' && !adminUnlocked) {
-    let status;
-    try {
-      status = await api.adminPin.status();
-    } catch (err) {
-      toast(err.message, true);
-      return;
-    }
-    if (status.has_pin) {
-      promptForAdminPin(() => switchView('admin'));
-      return;
-    }
+async function onLogout() {
+  try {
+    await api.auth.logout();
+  } catch (err) {
+    // Best-effort — clear the local session and reload regardless.
   }
-  switchView(name);
-}
-
-function promptForAdminPin(onSuccess) {
-  showModal(
-    `
-    <h2>Admin Access</h2>
-    <div class="form-row">
-      <label>Enter PIN</label>
-      <input id="adminPinInput" type="password" inputmode="numeric" autocomplete="off" />
-    </div>
-    <div class="modal-actions">
-      <button class="btn" id="pinCancel">Cancel</button>
-      <button class="btn primary" id="pinUnlock">Unlock</button>
-    </div>
-  `,
-    (modal) => {
-      const input = modal.querySelector('#adminPinInput');
-      input.focus();
-
-      const attempt = async () => {
-        try {
-          const result = await api.adminPin.verify(input.value);
-          if (result.valid) {
-            adminUnlocked = true;
-            closeModal();
-            onSuccess();
-          } else {
-            toast('Incorrect PIN', true);
-            input.value = '';
-            input.focus();
-          }
-        } catch (err) {
-          toast(err.message, true);
-        }
-      };
-
-      modal.querySelector('#pinCancel').addEventListener('click', closeModal);
-      modal.querySelector('#pinUnlock').addEventListener('click', attempt);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') attempt();
-      });
-    }
-  );
+  clearSession();
+  window.location.reload();
 }
 
 function switchView(name) {
