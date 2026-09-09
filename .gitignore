@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+*.log
+
+# runtime database (created at first launch)
+backend/data/*.sqlite
+backend/data/*.sqlite-shm
+backend/data/*.sqlite-wal
+
+.DS_Store
+Thumbs.db

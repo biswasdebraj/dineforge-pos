@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>FoodNest POS</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #111827;
+      color: #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #1f2937;
+      padding: 2rem 3rem;
+      border-radius: 12px;
+      text-align: center;
+    }
+    h1 { margin-top: 0; }
+    #status.ok { color: #34d399; }
+    #status.error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>FoodNest POS</h1>
+    <p>Phase 0 scaffold — Electron shell &rarr; PHP backend &rarr; SQLite</p>
+    <p id="status">Checking backend&hellip;</p>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

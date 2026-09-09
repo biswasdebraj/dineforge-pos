@@ -1,0 +1,13 @@
+{
+  "name": "foodnest-pos-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FoodNest POS desktop shell (Electron + Node orchestrating a PHP/SQLite backend)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
