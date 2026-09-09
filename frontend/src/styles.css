@@ -158,3 +158,20 @@ table.data-table th { color: var(--text-dim); font-weight: 600; font-size: 0.85r
 
 .toast { position: fixed; bottom: 1rem; right: 1rem; background: var(--panel); border: 1px solid var(--border); padding: 0.75rem 1rem; border-radius: 8px; z-index: 100; max-width: 320px; }
 .toast.error { border-color: var(--danger); color: var(--danger); }
+
+/* First-run setup wizard */
+.wizard-overlay:not([hidden]) {
+  position: fixed; inset: 0; background: var(--bg); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+.wizard-card { width: 480px; max-width: 92vw; }
+.wizard-steps { display: flex; justify-content: center; gap: 0.5rem; margin-bottom: 1.5rem; }
+.wizard-step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.wizard-step-dot.active { background: var(--accent); }
+.wizard-step-dot.done { background: var(--success); }
+.wizard-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 0.35rem; text-align: center; }
+.wizard-subtitle { color: var(--text-dim); text-align: center; margin: 0 0 1.5rem; }
+.wizard-card .form-row { flex-direction: column; align-items: stretch; margin-bottom: 1rem; }
+.wizard-card .form-row label { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.25rem; }
+.wizard-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 0.5rem; }
+.wizard-actions .spacer { flex: 1; }

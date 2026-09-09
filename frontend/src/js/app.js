@@ -2,6 +2,7 @@ import { api, money, toast, showModal, closeModal } from './api.js';
 import * as posView from './pos.js';
 import * as kitchenView from './kitchen.js';
 import * as adminView from './admin.js';
+import * as wizard from './wizard.js';
 
 const views = { pos: posView, kitchen: kitchenView, admin: adminView };
 let activeView = 'pos';
@@ -12,6 +13,12 @@ const shiftStatusEl = document.getElementById('shiftStatus');
 
 async function boot() {
   window.foodnest?.onBackendRestarted?.(() => boot());
+
+  try {
+    await wizard.runIfNeeded();
+  } catch (err) {
+    toast(`Setup wizard error: ${err.message}`, true);
+  }
 
   let settings;
   try {

@@ -41,8 +41,31 @@ test.describe('FoodNest POS smoke test', () => {
     await expect(window).toHaveTitle('FoodNest POS');
   });
 
+  test('first-run setup wizard walks through to the main app', async () => {
+    await expect(window.locator('#setupWizard')).not.toBeEmpty();
+
+    await window.locator('#wName').fill('E2E Restaurant');
+    await window.getByRole('button', { name: 'Next' }).click();
+
+    await window.getByRole('button', { name: 'Next' }).click(); // tax step, defaults fine
+
+    await window.getByRole('button', { name: 'Next' }).click(); // optional step, skip
+
+    await window.getByRole('button', { name: 'Start blank' }).click();
+
+    await expect(window.locator('#setupWizard')).toBeEmpty();
+    await expect(window.getByRole('button', { name: 'New Order' })).toBeVisible();
+  });
+
   test('full order lifecycle: create, add item, send to kitchen, pay, attempt receipt print', async () => {
     const apiBase = await window.evaluate(() => window.foodnest.getApiBase());
+
+    // Skip the first-run setup wizard so it doesn't block the UI this test drives.
+    await fetch(`${apiBase}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setup_completed: '1' }),
+    });
 
     const category = await (
       await fetch(`${apiBase}/api/menu/categories`, {
