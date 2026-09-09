@@ -17,7 +17,7 @@ $menuService = new MenuService($pdo);
 $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
 $settingsService = new SettingsService($pdo);
-$backupService = new BackupService($pdo);
+$backupService = new BackupService($pdo, get_data_dir() . '/backups');
 
 $router = new Router();
 

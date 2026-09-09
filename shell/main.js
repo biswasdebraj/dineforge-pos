@@ -9,6 +9,21 @@ const printerModule = require('./printer');
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const MAX_RESTART_ATTEMPTS = 5;
 
+// Packaged builds get backend/, frontend/, and the bundled PHP runtime
+// copied into resources/ (see electron-builder's extraResources config in
+// package.json) since they live outside shell/ in the repo. Dev mode reads
+// them straight from the sibling source directories instead.
+function resourcePath(...segments) {
+  const base = app.isPackaged ? process.resourcesPath : path.join(__dirname, '..');
+  return path.join(base, ...segments);
+}
+
+function getPhpBinaryPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'php', 'php.exe')
+    : path.join(__dirname, 'resources', 'php', 'php.exe');
+}
+
 let phpProcess = null;
 let mainWindow = null;
 let tray = null;
@@ -35,10 +50,15 @@ function getFreePort() {
 }
 
 function spawnPhpProcess(port) {
-  const docroot = path.join(__dirname, '..', 'backend', 'public');
-  const child = spawn('php', ['-S', `127.0.0.1:${port}`, '-t', docroot], {
+  const docroot = resourcePath('backend', 'public');
+  const phpBinary = getPhpBinaryPath();
+  const phpIni = path.join(path.dirname(phpBinary), 'php.ini');
+  const dataDir = path.join(app.getPath('userData'), 'data');
+
+  const child = spawn(phpBinary, ['-c', phpIni, '-S', `127.0.0.1:${port}`, '-t', docroot], {
     cwd: docroot,
     windowsHide: true,
+    env: { ...process.env, FOODNEST_DATA_DIR: dataDir },
   });
 
   child.stdout.on('data', (d) => logger.info(`[php] ${d}`.trim()));
@@ -205,7 +225,7 @@ async function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'src', 'index.html'));
+  mainWindow.loadFile(resourcePath('frontend', 'src', 'index.html'));
 }
 
 ipcMain.handle('get-api-port', () => currentApiPort);

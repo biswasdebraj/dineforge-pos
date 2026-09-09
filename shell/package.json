@@ -6,13 +6,50 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "predist": "node -e \"if(!require('fs').existsSync('resources/php/php.exe')){console.error('PHP runtime not found. Run: powershell -ExecutionPolicy Bypass -File scripts/fetch-php.ps1');process.exit(1);}\"",
+    "dist": "electron-builder --win"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "electron": "^33.0.0"
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3"
   },
   "dependencies": {
     "node-thermal-printer": "^4.6.1"
+  },
+  "build": {
+    "appId": "com.foodnest.pos",
+    "productName": "FoodNest POS",
+    "asar": false,
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "**/*",
+      "!e2e/**",
+      "!test-results/**",
+      "!playwright-report/**",
+      "!resources/php/**"
+    ],
+    "extraResources": [
+      { "from": "resources/php", "to": "php" },
+      {
+        "from": "../backend",
+        "to": "backend",
+        "filter": ["**/*", "!data/*.sqlite*", "!vendor/**", "!tests/**", "!.phpunit.cache/**"]
+      },
+      { "from": "../frontend", "to": "frontend" }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

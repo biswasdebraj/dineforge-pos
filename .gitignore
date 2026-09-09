@@ -7,6 +7,10 @@ out/
 test-results/
 playwright-report/
 
+# portable PHP runtime, ~60MB of official third-party binaries — fetch
+# with shell/scripts/fetch-php.ps1 rather than committing them
+shell/resources/php/
+
 # runtime database (created at first launch)
 backend/data/*.sqlite
 backend/data/*.sqlite-shm

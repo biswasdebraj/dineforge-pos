@@ -7,7 +7,10 @@ const { test, expect, _electron } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
 
-const DB_FILE = path.join(__dirname, '..', '..', 'backend', 'data', 'foodnest.sqlite');
+// Matches Electron's default userData path (app.getPath('userData')), which
+// is based on package.json's "name" field, not electron-builder's
+// productName — confirmed by inspecting a real dev run's actual DB location.
+const DB_FILE = path.join(process.env.APPDATA, 'foodnest-pos-shell', 'data', 'foodnest.sqlite');
 
 function resetDb() {
   for (const suffix of ['', '-shm', '-wal']) {
