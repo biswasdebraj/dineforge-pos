@@ -408,20 +408,20 @@ function renderSettings() {
   });
 
   panel.querySelector('#testPrintBtn').addEventListener('click', async () => {
-    if (!window.foodnest?.testPrint) {
+    if (!window.dineforge?.testPrint) {
       toast('Printing is only available in the desktop app', true);
       return;
     }
-    const result = await window.foodnest.testPrint();
+    const result = await window.dineforge.testPrint();
     toast(result.message || (result.success ? 'Test print sent' : 'Test print failed'), !result.success);
   });
 
   panel.querySelector('#openDrawerBtn').addEventListener('click', async () => {
-    if (!window.foodnest?.openCashDrawer) {
+    if (!window.dineforge?.openCashDrawer) {
       toast('Printing is only available in the desktop app', true);
       return;
     }
-    const result = await window.foodnest.openCashDrawer();
+    const result = await window.dineforge.openCashDrawer();
     if (!result.success) {
       toast(result.message || 'Could not open cash drawer', true);
     }

@@ -58,7 +58,7 @@ function spawnPhpProcess(port) {
   const child = spawn(phpBinary, ['-c', phpIni, '-S', `127.0.0.1:${port}`, '-t', docroot], {
     cwd: docroot,
     windowsHide: true,
-    env: { ...process.env, FOODNEST_DATA_DIR: dataDir },
+    env: { ...process.env, DINEFORGE_DATA_DIR: dataDir },
   });
 
   child.stdout.on('data', (d) => logger.info(`[php] ${d}`.trim()));
@@ -112,7 +112,7 @@ async function launchPhp() {
     if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
       logger.error('PHP backend crashed too many times; giving up automatic restarts');
       dialog.showErrorBox(
-        'FoodNest POS — Backend Error',
+        'DineForge POS — Backend Error',
         'The backend process stopped responding and could not be restarted automatically.\n\n' +
           'Check the logs (tray menu → Open Logs Folder) and restart the app.'
       );
@@ -174,11 +174,11 @@ function buildAppMenu() {
 function createTray() {
   const icon = nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
   const t = new Tray(icon);
-  t.setToolTip('FoodNest POS');
+  t.setToolTip('DineForge POS');
   t.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: 'Show FoodNest POS',
+        label: 'Show DineForge POS',
         click: () => {
           mainWindow.show();
           mainWindow.focus();
@@ -297,7 +297,7 @@ if (!gotLock) {
     tray = createTray();
     createWindow().catch((err) => {
       logger.error(`Failed to start app: ${err.message}`);
-      dialog.showErrorBox('FoodNest POS — Startup Error', err.message);
+      dialog.showErrorBox('DineForge POS — Startup Error', err.message);
       app.quit();
     });
   });

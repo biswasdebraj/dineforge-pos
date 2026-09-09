@@ -471,13 +471,13 @@ function onOpenPaymentModal() {
         currentOrder = null;
         await refresh();
 
-        if (method === 'cash' && window.foodnest?.openCashDrawer) {
-          window.foodnest.openCashDrawer().then((r) => {
+        if (method === 'cash' && window.dineforge?.openCashDrawer) {
+          window.dineforge.openCashDrawer().then((r) => {
             if (!r.success) toast(r.message || 'Could not open cash drawer', true);
           });
         }
-        if (shouldPrint && window.foodnest?.printReceipt) {
-          window.foodnest.printReceipt(paidOrderId).then((r) => {
+        if (shouldPrint && window.dineforge?.printReceipt) {
+          window.dineforge.printReceipt(paidOrderId).then((r) => {
             if (!r.success) toast(r.message || 'Receipt did not print', true);
           });
         }

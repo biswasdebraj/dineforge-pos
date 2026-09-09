@@ -9,7 +9,7 @@ function ensureLogFile() {
   if (logFile) return logFile;
   logDir = path.join(app.getPath('userData'), 'logs');
   fs.mkdirSync(logDir, { recursive: true });
-  logFile = path.join(logDir, 'foodnest.log');
+  logFile = path.join(logDir, 'dineforge.log');
   return logFile;
 }
 

@@ -10,7 +10,7 @@ function get_db_connection(): PDO
     static $pdo = null;
 
     if ($pdo === null) {
-        $dbPath = get_data_dir() . '/foodnest.sqlite';
+        $dbPath = get_data_dir() . '/dineforge.sqlite';
         $pdo = new PDO('sqlite:' . $dbPath);
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);

@@ -28,7 +28,7 @@ async function testPrint(settings) {
 
   printer.alignCenter();
   printer.bold(true);
-  printer.println(settings.restaurant_name || 'FoodNest POS');
+  printer.println(settings.restaurant_name || 'DineForge POS');
   printer.bold(false);
   printer.println('Test print OK');
   printer.println(new Date().toLocaleString());
@@ -52,7 +52,7 @@ async function printReceipt(settings, order) {
   printer.alignCenter();
   printer.bold(true);
   printer.setTextDoubleHeight();
-  printer.println(settings.restaurant_name || 'FoodNest POS');
+  printer.println(settings.restaurant_name || 'DineForge POS');
   printer.setTextNormal();
   printer.bold(false);
   printer.println(`Order #${order.order_number}`);

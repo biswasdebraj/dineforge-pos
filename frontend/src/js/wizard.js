@@ -13,7 +13,7 @@ export async function runIfNeeded() {
 
   const state = {
     step: 0,
-    restaurant_name: settings.restaurant_name || 'FoodNest',
+    restaurant_name: settings.restaurant_name || '',
     currency_symbol: settings.currency_symbol || '$',
     tax_name: 'Sales Tax',
     tax_rate: 0,
@@ -52,7 +52,7 @@ function wizardShell(body) {
 function renderRestaurantStep(overlay, state, finish, rerender) {
   overlay.innerHTML = wizardShell(`
     ${stepDots(0)}
-    <h1 class="wizard-title">Welcome to FoodNest POS</h1>
+    <h1 class="wizard-title">Welcome to DineForge POS</h1>
     <p class="wizard-subtitle">Let's get your restaurant set up. This only takes a minute.</p>
     <div class="form-row">
       <label>Restaurant name</label>
@@ -114,7 +114,7 @@ function renderTaxStep(overlay, state, finish, rerender) {
 }
 
 function renderOptionalStep(overlay, state, finish, rerender) {
-  const printerAvailable = !!window.foodnest?.testPrint;
+  const printerAvailable = !!window.dineforge?.testPrint;
   overlay.innerHTML = wizardShell(`
     ${stepDots(2)}
     <h1 class="wizard-title">Optional Setup</h1>
@@ -213,7 +213,7 @@ async function finishWizard(overlay, state, finish) {
       await createSampleMenu();
     }
 
-    toast('Setup complete — welcome to FoodNest POS!');
+    toast('Setup complete — welcome to DineForge POS!');
   } catch (err) {
     toast(`Setup error: ${err.message}`, true);
   } finally {

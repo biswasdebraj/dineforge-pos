@@ -1,8 +1,8 @@
 {
-  "name": "foodnest-pos-shell",
+  "name": "dineforge-pos-shell",
   "version": "0.1.0",
   "private": true,
-  "description": "FoodNest POS desktop shell (Electron + Node orchestrating a PHP/SQLite backend)",
+  "description": "DineForge POS desktop shell (Electron + Node orchestrating a PHP/SQLite backend)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -19,8 +19,8 @@
     "node-thermal-printer": "^4.6.1"
   },
   "build": {
-    "appId": "com.foodnest.pos",
-    "productName": "FoodNest POS",
+    "appId": "com.dineforge.pos",
+    "productName": "DineForge POS",
     "asar": false,
     "directories": {
       "output": "../dist"

@@ -1,6 +1,6 @@
 async function getApiBase() {
-  if (window.foodnest && window.foodnest.getApiBase) {
-    return window.foodnest.getApiBase();
+  if (window.dineforge && window.dineforge.getApiBase) {
+    return window.dineforge.getApiBase();
   }
   // Fallback for testing this page directly in a regular browser tab,
   // outside Electron: ?api_base=http://127.0.0.1:8899

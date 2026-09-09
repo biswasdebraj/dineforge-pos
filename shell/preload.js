@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('foodnest', {
+contextBridge.exposeInMainWorld('dineforge', {
   getApiBase: async () => {
     const port = await ipcRenderer.invoke('get-api-port');
     return `http://127.0.0.1:${port}`;

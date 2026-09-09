@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 INSERT INTO settings (key, value) VALUES
-    ('restaurant_name', 'FoodNest'),
+    ('restaurant_name', ''),
     ('currency', 'USD'),
     ('currency_symbol', '$');
 

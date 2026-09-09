@@ -9,7 +9,7 @@ final class BackupServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->backupDir = sys_get_temp_dir() . '/foodnest_test_backups_' . uniqid();
+        $this->backupDir = sys_get_temp_dir() . '/dineforge_test_backups_' . uniqid();
     }
 
     protected function tearDown(): void
@@ -61,7 +61,7 @@ final class BackupServiceTest extends TestCase
         // test doesn't need 16 real seconds to pass for distinct filenames.
         mkdir($this->backupDir, 0777, true);
         for ($i = 0; $i < 16; $i++) {
-            $path = $this->backupDir . sprintf('/foodnest-fake-%02d.sqlite', $i);
+            $path = $this->backupDir . sprintf('/dineforge-fake-%02d.sqlite', $i);
             touch($path, time() - (16 - $i));
         }
 

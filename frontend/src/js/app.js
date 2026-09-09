@@ -12,7 +12,7 @@ let adminUnlocked = false;
 const shiftStatusEl = document.getElementById('shiftStatus');
 
 async function boot() {
-  window.foodnest?.onBackendRestarted?.(() => boot());
+  window.dineforge?.onBackendRestarted?.(() => boot());
 
   try {
     await wizard.runIfNeeded();

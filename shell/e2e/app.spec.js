@@ -1,6 +1,6 @@
 // End-to-end smoke test driving the real packaged app (not a browser
 // fallback) through Electron's own _electron launcher. Requires no other
-// FoodNest POS instance running — the app's single-instance lock (see
+// DineForge POS instance running — the app's single-instance lock (see
 // main.js) would otherwise just focus that instance and this test would
 // hang waiting for a window that never appears.
 const { test, expect, _electron } = require('@playwright/test');
@@ -10,7 +10,7 @@ const fs = require('fs');
 // Matches Electron's default userData path (app.getPath('userData')), which
 // is based on package.json's "name" field, not electron-builder's
 // productName — confirmed by inspecting a real dev run's actual DB location.
-const DB_FILE = path.join(process.env.APPDATA, 'foodnest-pos-shell', 'data', 'foodnest.sqlite');
+const DB_FILE = path.join(process.env.APPDATA, 'dineforge-pos-shell', 'data', 'dineforge.sqlite');
 
 function resetDb() {
   for (const suffix of ['', '-shm', '-wal']) {
@@ -19,7 +19,7 @@ function resetDb() {
   }
 }
 
-test.describe('FoodNest POS smoke test', () => {
+test.describe('DineForge POS smoke test', () => {
   /** @type {import('@playwright/test').ElectronApplication} */
   let electronApp;
   /** @type {import('@playwright/test').Page} */
@@ -38,7 +38,7 @@ test.describe('FoodNest POS smoke test', () => {
   });
 
   test('window loads with the correct title', async () => {
-    await expect(window).toHaveTitle('FoodNest POS');
+    await expect(window).toHaveTitle('DineForge POS');
   });
 
   test('first-run setup wizard walks through to the main app', async () => {
@@ -58,7 +58,7 @@ test.describe('FoodNest POS smoke test', () => {
   });
 
   test('full order lifecycle: create, add item, send to kitchen, pay, attempt receipt print', async () => {
-    const apiBase = await window.evaluate(() => window.foodnest.getApiBase());
+    const apiBase = await window.evaluate(() => window.dineforge.getApiBase());
 
     // Skip the first-run setup wizard so it doesn't block the UI this test drives.
     await fetch(`${apiBase}/api/settings`, {

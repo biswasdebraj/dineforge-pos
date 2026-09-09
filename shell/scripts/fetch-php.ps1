@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Downloads and stages the portable PHP runtime bundled into the FoodNest POS
+Downloads and stages the portable PHP runtime bundled into the DineForge POS
 installer, so the restaurant owner never has to install PHP themselves.
 
 Run this once before `npm run dist`. Not committed to git (shell/resources/php

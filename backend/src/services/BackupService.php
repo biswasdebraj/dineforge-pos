@@ -19,7 +19,7 @@ final class BackupService
             mkdir($this->backupDir, 0777, true);
         }
 
-        $filename = sprintf('foodnest-%s-%s.sqlite', date('Ymd-His'), $reason);
+        $filename = sprintf('dineforge-%s-%s.sqlite', date('Ymd-His'), $reason);
         $path = $this->backupDir . '/' . $filename;
 
         // VACUUM INTO takes a consistent snapshot even while WAL is active,
