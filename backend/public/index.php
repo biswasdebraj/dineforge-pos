@@ -9,11 +9,13 @@ require_once __DIR__ . '/../src/db/connection.php';
 require_once __DIR__ . '/../src/services/MenuService.php';
 require_once __DIR__ . '/../src/services/ShiftService.php';
 require_once __DIR__ . '/../src/services/OrderService.php';
+require_once __DIR__ . '/../src/services/SettingsService.php';
 
 $pdo = get_db_connection();
 $menuService = new MenuService($pdo);
 $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
+$settingsService = new SettingsService($pdo);
 
 $router = new Router();
 
@@ -106,9 +108,26 @@ $router->post('/api/shifts/{id}/close', function (array $p) use ($shiftService) 
     json_response($shiftService->close((int) $p['id'], json_body()));
 });
 
+// Settings
+$router->get('/api/settings', function () use ($settingsService) {
+    json_response($settingsService->all());
+});
+$router->put('/api/settings', function () use ($settingsService) {
+    json_response($settingsService->update(json_body()));
+});
+
+// Taxes
+$router->get('/api/taxes', function () use ($settingsService) {
+    json_response($settingsService->listTaxes());
+});
+$router->put('/api/taxes/{id}', function (array $p) use ($settingsService) {
+    json_response($settingsService->updateTax((int) $p['id'], json_body()));
+});
+
 // Orders
 $router->get('/api/orders', function () use ($orderService) {
-    json_response($orderService->list($_GET['status'] ?? null));
+    $full = isset($_GET['full']) && $_GET['full'] === '1';
+    json_response($full ? $orderService->listFull($_GET['status'] ?? null) : $orderService->list($_GET['status'] ?? null));
 });
 $router->post('/api/orders', function () use ($orderService) {
     json_response($orderService->create(json_body()), 201);
@@ -124,6 +143,10 @@ $router->put('/api/orders/{id}/items/{itemId}', function (array $p) use ($orderS
 });
 $router->delete('/api/orders/{id}/items/{itemId}', function (array $p) use ($orderService) {
     json_response($orderService->voidItem((int) $p['id'], (int) $p['itemId']));
+});
+$router->put('/api/orders/{id}/items/{itemId}/status', function (array $p) use ($orderService) {
+    $input = json_body();
+    json_response($orderService->updateItemStatus((int) $p['id'], (int) $p['itemId'], (string) ($input['status'] ?? '')));
 });
 $router->post('/api/orders/{id}/discounts', function (array $p) use ($orderService) {
     json_response($orderService->applyDiscount((int) $p['id'], json_body()), 201);
@@ -142,6 +165,13 @@ $router->post('/api/orders/{id}/payments', function (array $p) use ($orderServic
 });
 
 header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 
 try {
     $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);

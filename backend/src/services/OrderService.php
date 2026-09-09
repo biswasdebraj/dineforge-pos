@@ -209,6 +209,30 @@ final class OrderService
         return $this->getFull($orderId);
     }
 
+    public function updateItemStatus(int $orderId, int $itemId, string $status): array
+    {
+        if (!in_array($status, ['pending', 'sent', 'preparing', 'ready', 'served'], true)) {
+            throw new InvalidArgumentException('invalid item status');
+        }
+
+        $itemStmt = $this->pdo->prepare('SELECT * FROM order_items WHERE id = :id AND order_id = :order_id');
+        $itemStmt->execute(['id' => $itemId, 'order_id' => $orderId]);
+        if ($itemStmt->fetch() === false) {
+            throw new RuntimeException('Order item not found');
+        }
+
+        $stmt = $this->pdo->prepare('UPDATE order_items SET status = :status WHERE id = :id');
+        $stmt->execute(['status' => $status, 'id' => $itemId]);
+
+        return $this->getFull($orderId);
+    }
+
+    public function listFull(?string $status = null): array
+    {
+        $orders = $this->list($status);
+        return array_map(fn (array $order) => $this->getFull((int) $order['id']), $orders);
+    }
+
     public function voidItem(int $orderId, int $itemId): array
     {
         $this->requireOpenOrder($orderId);
