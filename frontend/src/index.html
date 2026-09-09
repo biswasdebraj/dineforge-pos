@@ -4,6 +4,13 @@
   <meta charset="utf-8" />
   <title>DineForge POS</title>
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Applied before body paints, to avoid a flash of the wrong theme.
+    try {
+      var savedTheme = localStorage.getItem('dineforge_theme');
+      if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <div id="setupWizard" class="wizard-overlay" hidden></div>
@@ -17,6 +24,7 @@
       <button class="tab" data-view="kitchen">Kitchen</button>
       <button class="tab" data-view="admin">Admin</button>
     </nav>
+    <button class="btn theme-toggle" id="themeToggle" type="button">Dark</button>
     <div class="shift-status" id="shiftStatus"><span class="shift-dot"></span> Loading…</div>
   </header>
   <main id="views">

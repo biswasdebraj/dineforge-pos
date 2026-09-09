@@ -10,9 +10,37 @@ let currentShift = null;
 let adminUnlocked = false;
 
 const shiftStatusEl = document.getElementById('shiftStatus');
+const themeToggleEl = document.getElementById('themeToggle');
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  themeToggleEl.textContent = theme === 'dark' ? 'Light' : 'Dark';
+  try {
+    localStorage.setItem('dineforge_theme', theme);
+  } catch (e) {
+    // Private browsing / storage disabled — theme just won't persist across launches.
+  }
+}
+
+function initTheme() {
+  applyTheme(currentTheme());
+  themeToggleEl.addEventListener('click', () => {
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+  });
+}
 
 async function boot() {
   window.dineforge?.onBackendRestarted?.(() => boot());
+
+  initTheme();
 
   try {
     await wizard.runIfNeeded();
