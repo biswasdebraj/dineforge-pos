@@ -69,6 +69,57 @@ export async function init(root, ctx) {
   await loadMenu();
   await loadTables();
   await refresh();
+
+  initBarcodeScanner();
+}
+
+// Barcode scanners act as a keyboard typing very fast, ending with Enter.
+// We only intercept when focus isn't in a text field, so manually typing a
+// SKU into an admin form (or scanning into it) still works normally.
+function initBarcodeScanner() {
+  let buffer = '';
+  let resetTimer = null;
+
+  document.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    const isEditable = active && ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName);
+    if (isEditable) return;
+
+    if (e.key === 'Enter') {
+      const code = buffer;
+      buffer = '';
+      clearTimeout(resetTimer);
+      if (code.length >= 3) {
+        onBarcodeScanned(code);
+      }
+      return;
+    }
+
+    if (e.key.length === 1) {
+      buffer += e.key;
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        buffer = '';
+      }, 500);
+    }
+  });
+}
+
+async function onBarcodeScanned(code) {
+  if (!currentOrder) {
+    toast('Start or select an order first', true);
+    return;
+  }
+  try {
+    const matches = await api.items.list({ sku: code, active_only: '1' });
+    if (matches.length === 0) {
+      toast(`No item found for barcode "${code}"`, true);
+      return;
+    }
+    await onAddItem(matches[0].id);
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 async function loadMenu() {
@@ -374,6 +425,10 @@ function onOpenPaymentModal() {
     <div class="form-row"><label>Amount Due</label><input id="payAmount" type="text" value="${(totalDue / 100).toFixed(2)}" disabled /></div>
     <div class="form-row" id="tenderedRow"><label>Tendered</label><input id="payTendered" type="number" min="0" step="0.01" value="${(totalDue / 100).toFixed(2)}" /></div>
     <div class="form-row"><label>Change Due</label><input id="payChange" type="text" value="${money(0, currencySymbol)}" disabled /></div>
+    <div class="form-row" style="flex-direction:row;align-items:center;gap:0.5rem;">
+      <input id="payPrintReceipt" type="checkbox" checked />
+      <label style="margin:0;">Print receipt</label>
+    </div>
     <div class="modal-actions">
       <button class="btn" id="payCancel">Cancel</button>
       <button class="btn primary" id="payConfirm">Confirm Payment</button>
@@ -403,8 +458,10 @@ function onOpenPaymentModal() {
     modal.querySelector('#payConfirm').addEventListener('click', async () => {
       const tenderedCents =
         method === 'cash' ? Math.round(parseFloat(tenderedInput.value || '0') * 100) : totalDue;
+      const shouldPrint = modal.querySelector('#payPrintReceipt').checked;
+      const paidOrderId = currentOrder.id;
       try {
-        await api.orders.pay(currentOrder.id, {
+        await api.orders.pay(paidOrderId, {
           method,
           amount_cents: totalDue,
           tendered_cents: tenderedCents,
@@ -413,6 +470,17 @@ function onOpenPaymentModal() {
         closeModal();
         currentOrder = null;
         await refresh();
+
+        if (method === 'cash' && window.foodnest?.openCashDrawer) {
+          window.foodnest.openCashDrawer().then((r) => {
+            if (!r.success) toast(r.message || 'Could not open cash drawer', true);
+          });
+        }
+        if (shouldPrint && window.foodnest?.printReceipt) {
+          window.foodnest.printReceipt(paidOrderId).then((r) => {
+            if (!r.success) toast(r.message || 'Receipt did not print', true);
+          });
+        }
       } catch (err) {
         toast(err.message, true);
       }

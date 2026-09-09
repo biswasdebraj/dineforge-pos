@@ -51,7 +51,8 @@ $router->delete('/api/menu/categories/{id}', function (array $p) use ($menuServi
 $router->get('/api/menu/items', function () use ($menuService) {
     $categoryId = isset($_GET['category_id']) ? (int) $_GET['category_id'] : null;
     $activeOnly = isset($_GET['active_only']) && $_GET['active_only'] === '1';
-    json_response($menuService->listItems($categoryId, $activeOnly));
+    $sku = isset($_GET['sku']) ? (string) $_GET['sku'] : null;
+    json_response($menuService->listItems($categoryId, $activeOnly, $sku));
 });
 $router->post('/api/menu/items', function () use ($menuService) {
     json_response($menuService->createItem(json_body()), 201);

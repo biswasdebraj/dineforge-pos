@@ -4,6 +4,7 @@ const net = require('net');
 const http = require('http');
 const { spawn } = require('child_process');
 const logger = require('./logger');
+const printerModule = require('./printer');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const MAX_RESTART_ATTEMPTS = 5;
@@ -208,6 +209,56 @@ async function createWindow() {
 }
 
 ipcMain.handle('get-api-port', () => currentApiPort);
+
+function fetchJson(path) {
+  return new Promise((resolve, reject) => {
+    http
+      .get(`http://127.0.0.1:${currentApiPort}${path}`, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      })
+      .on('error', reject);
+  });
+}
+
+ipcMain.handle('test-print', async () => {
+  try {
+    const settings = await fetchJson('/api/settings');
+    return await printerModule.testPrint(settings);
+  } catch (err) {
+    logger.error(`test-print failed: ${err.message}`);
+    return { success: false, message: err.message };
+  }
+});
+
+ipcMain.handle('open-cash-drawer', async () => {
+  try {
+    const settings = await fetchJson('/api/settings');
+    return await printerModule.openCashDrawer(settings);
+  } catch (err) {
+    logger.error(`open-cash-drawer failed: ${err.message}`);
+    return { success: false, message: err.message };
+  }
+});
+
+ipcMain.handle('print-receipt', async (event, orderId) => {
+  try {
+    const [order, settings] = await Promise.all([fetchJson(`/api/orders/${orderId}`), fetchJson('/api/settings')]);
+    return await printerModule.printReceipt(settings, order);
+  } catch (err) {
+    logger.error(`print-receipt failed: ${err.message}`);
+    return { success: false, message: err.message };
+  }
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

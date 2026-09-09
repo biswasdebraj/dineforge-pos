@@ -8,4 +8,7 @@ contextBridge.exposeInMainWorld('foodnest', {
   onBackendRestarted: (callback) => {
     ipcRenderer.on('backend-restarted', () => callback());
   },
+  testPrint: () => ipcRenderer.invoke('test-print'),
+  openCashDrawer: () => ipcRenderer.invoke('open-cash-drawer'),
+  printReceipt: (orderId) => ipcRenderer.invoke('print-receipt', orderId),
 });

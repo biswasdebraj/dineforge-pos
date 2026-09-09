@@ -74,7 +74,7 @@ function renderMenu() {
 
     <div class="section-title">Menu Items</div>
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>SKU / Barcode</th><th>Active</th><th></th></tr></thead>
       <tbody>
         ${items
           .map(
@@ -87,6 +87,7 @@ function renderMenu() {
               </select>
             </td>
             <td><input class="item-price" type="number" min="0" step="0.01" value="${(i.price_cents / 100).toFixed(2)}" style="width:80px" /></td>
+            <td><input class="item-sku" value="${escapeHtml(i.sku || '')}" placeholder="scan or type" style="width:110px" /></td>
             <td><input class="item-active" type="checkbox" ${i.is_active ? 'checked' : ''} /></td>
             <td>
               <button class="inline-btn item-save">Save</button>
@@ -103,6 +104,7 @@ function renderMenu() {
         ${categories.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
       </select>
       <input id="newItemPrice" type="number" min="0" step="0.01" placeholder="Price" style="width:100px" />
+      <input id="newItemSku" type="text" placeholder="SKU / barcode (optional)" style="width:150px" />
       <button class="btn" id="newItemBtn">Add Item</button>
     </div>
   `;
@@ -122,6 +124,7 @@ function renderMenu() {
         name: row.querySelector('.item-name').value.trim(),
         category_id: Number(row.querySelector('.item-category').value),
         price_cents: Math.round(parseFloat(row.querySelector('.item-price').value || '0') * 100),
+        sku: row.querySelector('.item-sku').value.trim() || null,
         is_active: row.querySelector('.item-active').checked,
       })
     );
@@ -144,12 +147,13 @@ function renderMenu() {
     const name = panel.querySelector('#newItemName').value.trim();
     const categoryId = Number(panel.querySelector('#newItemCategory').value);
     const price = parseFloat(panel.querySelector('#newItemPrice').value || '0');
+    const sku = panel.querySelector('#newItemSku').value.trim() || undefined;
     if (!name || !categoryId || price < 0) {
       toast('Enter a name, category, and price', true);
       return;
     }
     try {
-      await api.items.create({ name, category_id: categoryId, price_cents: Math.round(price * 100) });
+      await api.items.create({ name, category_id: categoryId, price_cents: Math.round(price * 100), sku });
       await refresh();
       toast('Item added');
     } catch (err) {
@@ -283,7 +287,57 @@ function renderSettings() {
       <button class="btn primary" id="saveTaxBtn">Save Tax</button>
     </div>
     <div class="empty-hint">This rate applies automatically to every order's subtotal after discounts.</div>
+
+    <div class="section-title">Receipt Printer</div>
+    <div class="form-row">
+      <input id="printerIp" type="text" value="${escapeHtml(settings.printer_ip || '')}" placeholder="Printer IP address" style="width:160px" />
+      <input id="printerPort" type="text" value="${escapeHtml(settings.printer_port || '9100')}" placeholder="Port" style="width:80px" />
+      <select id="printerType">
+        <option value="epson" ${settings.printer_type !== 'star' ? 'selected' : ''}>Epson-compatible</option>
+        <option value="star" ${settings.printer_type === 'star' ? 'selected' : ''}>Star</option>
+      </select>
+      <button class="btn primary" id="savePrinterBtn">Save</button>
+    </div>
+    <div class="form-row">
+      <button class="btn" id="testPrintBtn">Test Print</button>
+      <button class="btn" id="openDrawerBtn">Open Cash Drawer</button>
+    </div>
+    <div class="empty-hint">Network (Ethernet/Wi-Fi) ESC/POS printers only, e.g. 192.168.1.50. USB/serial printers aren't supported yet. Only available in the desktop app, not a browser tab.</div>
   `;
+
+  panel.querySelector('#savePrinterBtn').addEventListener('click', async () => {
+    try {
+      await api.settings.update({
+        printer_ip: panel.querySelector('#printerIp').value.trim(),
+        printer_port: panel.querySelector('#printerPort').value.trim() || '9100',
+        printer_type: panel.querySelector('#printerType').value,
+      });
+      await refresh();
+      toast('Printer settings saved');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  panel.querySelector('#testPrintBtn').addEventListener('click', async () => {
+    if (!window.foodnest?.testPrint) {
+      toast('Printing is only available in the desktop app', true);
+      return;
+    }
+    const result = await window.foodnest.testPrint();
+    toast(result.message || (result.success ? 'Test print sent' : 'Test print failed'), !result.success);
+  });
+
+  panel.querySelector('#openDrawerBtn').addEventListener('click', async () => {
+    if (!window.foodnest?.openCashDrawer) {
+      toast('Printing is only available in the desktop app', true);
+      return;
+    }
+    const result = await window.foodnest.openCashDrawer();
+    if (!result.success) {
+      toast(result.message || 'Could not open cash drawer', true);
+    }
+  });
 
   panel.querySelector('#saveSettingsBtn').addEventListener('click', async () => {
     try {

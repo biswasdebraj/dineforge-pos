@@ -76,7 +76,7 @@ final class MenuService
         return $row === false ? null : $row;
     }
 
-    public function listItems(?int $categoryId = null, bool $activeOnly = false): array
+    public function listItems(?int $categoryId = null, bool $activeOnly = false, ?string $sku = null): array
     {
         $sql = 'SELECT * FROM menu_items WHERE 1 = 1';
         $params = [];
@@ -88,6 +88,11 @@ final class MenuService
 
         if ($activeOnly) {
             $sql .= ' AND is_active = 1';
+        }
+
+        if ($sku !== null) {
+            $sql .= ' AND sku = :sku';
+            $params['sku'] = $sku;
         }
 
         $sql .= ' ORDER BY sort_order, name';
