@@ -49,6 +49,10 @@ export const api = {
     list: () => apiFetch('/api/taxes'),
     update: (id, body) => apiFetch(`/api/taxes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   },
+  backups: {
+    list: () => apiFetch('/api/backups'),
+    create: () => apiFetch('/api/backups', { method: 'POST' }),
+  },
   categories: {
     list: () => apiFetch('/api/menu/categories'),
     create: (body) => apiFetch('/api/menu/categories', { method: 'POST', body: JSON.stringify(body) }),

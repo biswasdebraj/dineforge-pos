@@ -1,11 +1,18 @@
 import { api, toast, escapeHtml } from './api.js';
 
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 let root = null;
 let categories = [];
 let items = [];
 let tables = [];
 let settings = {};
 let taxes = [];
+let backups = [];
 
 export async function init(container) {
   root = container;
@@ -32,12 +39,13 @@ export async function init(container) {
 
 export async function refresh() {
   if (!root) return;
-  [categories, items, tables, settings, taxes] = await Promise.all([
+  [categories, items, tables, settings, taxes, backups] = await Promise.all([
     api.categories.list(),
     api.items.list(),
     api.tables.list(),
     api.settings.get(),
     api.taxes.list(),
+    api.backups.list(),
   ]);
   renderMenu();
   renderTables();
@@ -303,7 +311,41 @@ function renderSettings() {
       <button class="btn" id="openDrawerBtn">Open Cash Drawer</button>
     </div>
     <div class="empty-hint">Network (Ethernet/Wi-Fi) ESC/POS printers only, e.g. 192.168.1.50. USB/serial printers aren't supported yet. Only available in the desktop app, not a browser tab.</div>
+
+    <div class="section-title">Backups</div>
+    <div class="form-row">
+      <button class="btn primary" id="backupNowBtn">Backup Now</button>
+    </div>
+    ${
+      backups.length === 0
+        ? '<div class="empty-hint">No backups yet. One is also taken automatically whenever a shift is closed.</div>'
+        : `<table class="data-table">
+             <thead><tr><th>File</th><th>Size</th><th>Created</th></tr></thead>
+             <tbody>
+               ${backups
+                 .map(
+                   (b) => `
+                 <tr>
+                   <td>${escapeHtml(b.filename)}</td>
+                   <td>${formatBytes(b.size_bytes)}</td>
+                   <td>${new Date(b.created_at).toLocaleString()}</td>
+                 </tr>`
+                 )
+                 .join('')}
+             </tbody>
+           </table>`
+    }
   `;
+
+  panel.querySelector('#backupNowBtn').addEventListener('click', async () => {
+    try {
+      await api.backups.create();
+      await refresh();
+      toast('Backup created');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
 
   panel.querySelector('#savePrinterBtn').addEventListener('click', async () => {
     try {

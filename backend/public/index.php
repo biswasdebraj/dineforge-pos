@@ -10,12 +10,14 @@ require_once __DIR__ . '/../src/services/MenuService.php';
 require_once __DIR__ . '/../src/services/ShiftService.php';
 require_once __DIR__ . '/../src/services/OrderService.php';
 require_once __DIR__ . '/../src/services/SettingsService.php';
+require_once __DIR__ . '/../src/services/BackupService.php';
 
 $pdo = get_db_connection();
 $menuService = new MenuService($pdo);
 $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
 $settingsService = new SettingsService($pdo);
+$backupService = new BackupService($pdo);
 
 $router = new Router();
 
@@ -105,8 +107,23 @@ $router->get('/api/shifts/current', function () use ($shiftService) {
 $router->post('/api/shifts/open', function () use ($shiftService) {
     json_response($shiftService->open(json_body()), 201);
 });
-$router->post('/api/shifts/{id}/close', function (array $p) use ($shiftService) {
-    json_response($shiftService->close((int) $p['id'], json_body()));
+$router->post('/api/shifts/{id}/close', function (array $p) use ($shiftService, $backupService) {
+    $result = $shiftService->close((int) $p['id'], json_body());
+    try {
+        $backupService->create('shift-close');
+    } catch (Throwable $e) {
+        // A failed backup shouldn't block the shift from closing.
+        error_log('Backup after shift close failed: ' . $e->getMessage());
+    }
+    json_response($result);
+});
+
+// Backups
+$router->get('/api/backups', function () use ($backupService) {
+    json_response($backupService->list());
+});
+$router->post('/api/backups', function () use ($backupService) {
+    json_response($backupService->create('manual'), 201);
 });
 
 // Settings

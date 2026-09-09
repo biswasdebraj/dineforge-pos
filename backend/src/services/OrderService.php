@@ -104,6 +104,19 @@ final class OrderService
         return $order;
     }
 
+    private function transact(callable $fn)
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $result = $fn();
+            $this->pdo->commit();
+            return $result;
+        } catch (Throwable $e) {
+            $this->pdo->rollBack();
+            throw $e;
+        }
+    }
+
     private function requireOpenOrder(int $orderId): array
     {
         $order = $this->find($orderId);
@@ -133,8 +146,7 @@ final class OrderService
             throw new InvalidArgumentException('menu item not found or inactive');
         }
 
-        $this->pdo->beginTransaction();
-        try {
+        return $this->transact(function () use ($orderId, $menuItemId, $menuItem, $quantity, $input) {
             $stmt = $this->pdo->prepare(
                 'INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price_cents, quantity, notes)
                  VALUES (:order_id, :menu_item_id, :item_name, :unit_price_cents, :quantity, :notes)'
@@ -170,13 +182,8 @@ final class OrderService
             }
 
             $this->recalculateTotals($orderId);
-            $this->pdo->commit();
-        } catch (Throwable $e) {
-            $this->pdo->rollBack();
-            throw $e;
-        }
-
-        return $this->getFull($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     public function updateItem(int $orderId, int $itemId, array $input): array
@@ -195,18 +202,19 @@ final class OrderService
             throw new InvalidArgumentException('quantity must be at least 1');
         }
 
-        $stmt = $this->pdo->prepare(
-            'UPDATE order_items SET quantity = :quantity, notes = :notes WHERE id = :id'
-        );
-        $stmt->execute([
-            'quantity' => $quantity,
-            'notes' => $input['notes'] ?? $item['notes'],
-            'id' => $itemId,
-        ]);
+        return $this->transact(function () use ($orderId, $itemId, $quantity, $input, $item) {
+            $stmt = $this->pdo->prepare(
+                'UPDATE order_items SET quantity = :quantity, notes = :notes WHERE id = :id'
+            );
+            $stmt->execute([
+                'quantity' => $quantity,
+                'notes' => $input['notes'] ?? $item['notes'],
+                'id' => $itemId,
+            ]);
 
-        $this->recalculateTotals($orderId);
-
-        return $this->getFull($orderId);
+            $this->recalculateTotals($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     public function updateItemStatus(int $orderId, int $itemId, string $status): array
@@ -237,14 +245,15 @@ final class OrderService
     {
         $this->requireOpenOrder($orderId);
 
-        $stmt = $this->pdo->prepare('UPDATE order_items SET status = \'void\' WHERE id = :id AND order_id = :order_id');
-        $stmt->execute(['id' => $itemId, 'order_id' => $orderId]);
+        return $this->transact(function () use ($orderId, $itemId) {
+            $stmt = $this->pdo->prepare('UPDATE order_items SET status = \'void\' WHERE id = :id AND order_id = :order_id');
+            $stmt->execute(['id' => $itemId, 'order_id' => $orderId]);
 
-        log_audit($this->pdo, 'order_item', $itemId, 'void');
+            log_audit($this->pdo, 'order_item', $itemId, 'void');
 
-        $this->recalculateTotals($orderId);
-
-        return $this->getFull($orderId);
+            $this->recalculateTotals($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     public function applyDiscount(int $orderId, array $input): array
@@ -279,49 +288,52 @@ final class OrderService
             $discountId = null;
         }
 
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO order_discounts (order_id, discount_id, label, amount_cents)
-             VALUES (:order_id, :discount_id, :label, :amount_cents)'
-        );
-        $stmt->execute([
-            'order_id' => $orderId,
-            'discount_id' => $discountId,
-            'label' => $label,
-            'amount_cents' => $amountCents,
-        ]);
+        return $this->transact(function () use ($orderId, $discountId, $label, $amountCents) {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO order_discounts (order_id, discount_id, label, amount_cents)
+                 VALUES (:order_id, :discount_id, :label, :amount_cents)'
+            );
+            $stmt->execute([
+                'order_id' => $orderId,
+                'discount_id' => $discountId,
+                'label' => $label,
+                'amount_cents' => $amountCents,
+            ]);
 
-        log_audit($this->pdo, 'order', $orderId, 'apply_discount', ['label' => $label, 'amount_cents' => $amountCents]);
+            log_audit($this->pdo, 'order', $orderId, 'apply_discount', ['label' => $label, 'amount_cents' => $amountCents]);
 
-        $this->recalculateTotals($orderId);
-
-        return $this->getFull($orderId);
+            $this->recalculateTotals($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     public function removeDiscount(int $orderId, int $discountRowId): array
     {
         $this->requireOpenOrder($orderId);
 
-        $stmt = $this->pdo->prepare('DELETE FROM order_discounts WHERE id = :id AND order_id = :order_id');
-        $stmt->execute(['id' => $discountRowId, 'order_id' => $orderId]);
+        return $this->transact(function () use ($orderId, $discountRowId) {
+            $stmt = $this->pdo->prepare('DELETE FROM order_discounts WHERE id = :id AND order_id = :order_id');
+            $stmt->execute(['id' => $discountRowId, 'order_id' => $orderId]);
 
-        $this->recalculateTotals($orderId);
-
-        return $this->getFull($orderId);
+            $this->recalculateTotals($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     public function sendToKitchen(int $orderId): array
     {
-        $order = $this->requireOpenOrder($orderId);
+        $this->requireOpenOrder($orderId);
 
-        $this->pdo->prepare('UPDATE orders SET status = \'sent_to_kitchen\' WHERE id = :id')
-            ->execute(['id' => $orderId]);
+        return $this->transact(function () use ($orderId) {
+            $this->pdo->prepare('UPDATE orders SET status = \'sent_to_kitchen\' WHERE id = :id')
+                ->execute(['id' => $orderId]);
 
-        $this->pdo->prepare("UPDATE order_items SET status = 'sent' WHERE order_id = :id AND status = 'pending'")
-            ->execute(['id' => $orderId]);
+            $this->pdo->prepare("UPDATE order_items SET status = 'sent' WHERE order_id = :id AND status = 'pending'")
+                ->execute(['id' => $orderId]);
 
-        log_audit($this->pdo, 'order', $orderId, 'send_to_kitchen');
-
-        return $this->getFull($orderId);
+            log_audit($this->pdo, 'order', $orderId, 'send_to_kitchen');
+            return $this->getFull($orderId);
+        });
     }
 
     public function voidOrder(int $orderId): array
@@ -365,8 +377,7 @@ final class OrderService
         $tenderedCents = isset($input['tendered_cents']) ? (int) $input['tendered_cents'] : null;
         $changeDueCents = $tenderedCents !== null ? max(0, $tenderedCents - $amountCents) : null;
 
-        $this->pdo->beginTransaction();
-        try {
+        return $this->transact(function () use ($orderId, $method, $amountCents, $tenderedCents, $changeDueCents) {
             $stmt = $this->pdo->prepare(
                 'INSERT INTO payments (order_id, method, amount_cents, tendered_cents, change_due_cents)
                  VALUES (:order_id, :method, :amount_cents, :tendered_cents, :change_due_cents)'
@@ -390,13 +401,8 @@ final class OrderService
                 log_audit($this->pdo, 'order', $orderId, 'paid', ['total_paid_cents' => $totalPaid]);
             }
 
-            $this->pdo->commit();
-        } catch (Throwable $e) {
-            $this->pdo->rollBack();
-            throw $e;
-        }
-
-        return $this->getFull($orderId);
+            return $this->getFull($orderId);
+        });
     }
 
     private function recalculateTotals(int $orderId): void
