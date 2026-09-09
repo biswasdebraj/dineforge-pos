@@ -8,9 +8,9 @@ final class BackupService
 
     private string $backupDir;
 
-    public function __construct(private PDO $pdo)
+    public function __construct(private PDO $pdo, ?string $backupDir = null)
     {
-        $this->backupDir = __DIR__ . '/../../data/backups';
+        $this->backupDir = $backupDir ?? (__DIR__ . '/../../data/backups');
     }
 
     public function create(string $reason = 'manual'): array

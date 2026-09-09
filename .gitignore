@@ -1,7 +1,11 @@
 node_modules/
+vendor/
 dist/
 out/
 *.log
+.phpunit.cache/
+test-results/
+playwright-report/
 
 # runtime database (created at first launch)
 backend/data/*.sqlite

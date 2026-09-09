@@ -5,9 +5,11 @@
   "description": "FoodNest POS desktop shell (Electron + Node orchestrating a PHP/SQLite backend)",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "electron": "^33.0.0"
   },
   "dependencies": {
