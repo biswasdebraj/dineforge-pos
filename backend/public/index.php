@@ -134,6 +134,22 @@ $router->put('/api/settings', function () use ($settingsService) {
     json_response($settingsService->update(json_body()));
 });
 
+// Admin PIN gate (UI-level lock on the Admin screen, not API auth — see
+// project docs; the backend only ever listens on 127.0.0.1)
+$router->get('/api/admin-pin/status', function () use ($settingsService) {
+    json_response(['has_pin' => $settingsService->hasAdminPin()]);
+});
+$router->post('/api/admin-pin/verify', function () use ($settingsService) {
+    $input = json_body();
+    json_response(['valid' => $settingsService->verifyAdminPin((string) ($input['pin'] ?? ''))]);
+});
+$router->put('/api/admin-pin', function () use ($settingsService) {
+    $input = json_body();
+    $pin = isset($input['pin']) && $input['pin'] !== '' ? (string) $input['pin'] : null;
+    $settingsService->setAdminPin($pin);
+    json_response(['has_pin' => $settingsService->hasAdminPin()]);
+});
+
 // Taxes
 $router->get('/api/taxes', function () use ($settingsService) {
     json_response($settingsService->listTaxes());

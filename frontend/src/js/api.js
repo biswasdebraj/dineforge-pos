@@ -45,6 +45,11 @@ export const api = {
     get: () => apiFetch('/api/settings'),
     update: (body) => apiFetch('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
   },
+  adminPin: {
+    status: () => apiFetch('/api/admin-pin/status'),
+    verify: (pin) => apiFetch('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin }) }),
+    set: (pin) => apiFetch('/api/admin-pin', { method: 'PUT', body: JSON.stringify({ pin }) }),
+  },
   taxes: {
     list: () => apiFetch('/api/taxes'),
     update: (id, body) => apiFetch(`/api/taxes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),

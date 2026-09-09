@@ -6,6 +6,7 @@ import * as adminView from './admin.js';
 const views = { pos: posView, kitchen: kitchenView, admin: adminView };
 let activeView = 'pos';
 let currentShift = null;
+let adminUnlocked = false;
 
 const shiftStatusEl = document.getElementById('shiftStatus');
 
@@ -23,7 +24,7 @@ async function boot() {
   const ctx = { currencySymbol: settings.currency_symbol || '$' };
 
   document.querySelectorAll('.tab').forEach((btn) => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+    btn.addEventListener('click', () => onTabClick(btn.dataset.view));
   });
 
   await refreshShiftStatus();
@@ -42,6 +43,66 @@ async function boot() {
     }
     refreshShiftStatus();
   }, 8000);
+}
+
+async function onTabClick(name) {
+  if (name === 'admin' && !adminUnlocked) {
+    let status;
+    try {
+      status = await api.adminPin.status();
+    } catch (err) {
+      toast(err.message, true);
+      return;
+    }
+    if (status.has_pin) {
+      promptForAdminPin(() => switchView('admin'));
+      return;
+    }
+  }
+  switchView(name);
+}
+
+function promptForAdminPin(onSuccess) {
+  showModal(
+    `
+    <h2>Admin Access</h2>
+    <div class="form-row">
+      <label>Enter PIN</label>
+      <input id="adminPinInput" type="password" inputmode="numeric" autocomplete="off" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="pinCancel">Cancel</button>
+      <button class="btn primary" id="pinUnlock">Unlock</button>
+    </div>
+  `,
+    (modal) => {
+      const input = modal.querySelector('#adminPinInput');
+      input.focus();
+
+      const attempt = async () => {
+        try {
+          const result = await api.adminPin.verify(input.value);
+          if (result.valid) {
+            adminUnlocked = true;
+            closeModal();
+            onSuccess();
+          } else {
+            toast('Incorrect PIN', true);
+            input.value = '';
+            input.focus();
+          }
+        } catch (err) {
+          toast(err.message, true);
+        }
+      };
+
+      modal.querySelector('#pinCancel').addEventListener('click', closeModal);
+      modal.querySelector('#pinUnlock').addEventListener('click', attempt);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') attempt();
+      });
+    }
+  );
 }
 
 function switchView(name) {

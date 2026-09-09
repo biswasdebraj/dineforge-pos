@@ -13,6 +13,7 @@ let tables = [];
 let settings = {};
 let taxes = [];
 let backups = [];
+let adminPinStatus = { has_pin: false };
 
 export async function init(container) {
   root = container;
@@ -39,13 +40,14 @@ export async function init(container) {
 
 export async function refresh() {
   if (!root) return;
-  [categories, items, tables, settings, taxes, backups] = await Promise.all([
+  [categories, items, tables, settings, taxes, backups, adminPinStatus] = await Promise.all([
     api.categories.list(),
     api.items.list(),
     api.tables.list(),
     api.settings.get(),
     api.taxes.list(),
     api.backups.list(),
+    api.adminPin.status(),
   ]);
   renderMenu();
   renderTables();
@@ -335,6 +337,19 @@ function renderSettings() {
              </tbody>
            </table>`
     }
+
+    <div class="section-title">Admin PIN</div>
+    ${
+      adminPinStatus.has_pin
+        ? '<div class="empty-hint">A PIN is currently required to open this Admin screen.</div>'
+        : '<div class="empty-hint">No PIN set — this Admin screen is open to anyone. Set one to keep staff/customers out of settings.</div>'
+    }
+    <div class="form-row">
+      <input id="adminPinNew" type="password" inputmode="numeric" autocomplete="off" placeholder="New PIN" style="width:120px" />
+      <input id="adminPinConfirm" type="password" inputmode="numeric" autocomplete="off" placeholder="Confirm PIN" style="width:120px" />
+      <button class="btn primary" id="savePinBtn">${adminPinStatus.has_pin ? 'Change PIN' : 'Set PIN'}</button>
+      ${adminPinStatus.has_pin ? '<button class="btn danger" id="removePinBtn">Remove PIN</button>' : ''}
+    </div>
   `;
 
   panel.querySelector('#backupNowBtn').addEventListener('click', async () => {
@@ -342,6 +357,37 @@ function renderSettings() {
       await api.backups.create();
       await refresh();
       toast('Backup created');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  panel.querySelector('#savePinBtn').addEventListener('click', async () => {
+    const pin = panel.querySelector('#adminPinNew').value;
+    const confirmPin = panel.querySelector('#adminPinConfirm').value;
+    if (pin.length < 4) {
+      toast('PIN must be at least 4 digits', true);
+      return;
+    }
+    if (pin !== confirmPin) {
+      toast('PINs do not match', true);
+      return;
+    }
+    try {
+      await api.adminPin.set(pin);
+      await refresh();
+      toast('PIN saved');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  panel.querySelector('#removePinBtn')?.addEventListener('click', async () => {
+    if (!window.confirm('Remove the Admin PIN? Anyone will be able to open this screen.')) return;
+    try {
+      await api.adminPin.set(null);
+      await refresh();
+      toast('PIN removed');
     } catch (err) {
       toast(err.message, true);
     }
