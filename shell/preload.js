@@ -1,5 +1,11 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('foodnest', {
-  apiBase: `http://127.0.0.1:${process.env.FOODNEST_API_PORT}`,
+  getApiBase: async () => {
+    const port = await ipcRenderer.invoke('get-api-port');
+    return `http://127.0.0.1:${port}`;
+  },
+  onBackendRestarted: (callback) => {
+    ipcRenderer.on('backend-restarted', () => callback());
+  },
 });
