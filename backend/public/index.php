@@ -6,7 +6,14 @@ require_once __DIR__ . '/../src/support/response.php';
 require_once __DIR__ . '/../src/support/router.php';
 require_once __DIR__ . '/../src/support/audit.php';
 require_once __DIR__ . '/../src/support/guard.php';
+require_once __DIR__ . '/../src/support/static_frontend.php';
 require_once __DIR__ . '/../src/db/connection.php';
+
+$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+if (!str_starts_with($requestUri, '/api/')) {
+    serve_static_frontend($requestUri);
+    exit;
+}
 require_once __DIR__ . '/../src/services/MenuService.php';
 require_once __DIR__ . '/../src/services/ShiftService.php';
 require_once __DIR__ . '/../src/services/OrderService.php';
@@ -236,8 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 try {
-    $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-    $router->dispatch($_SERVER['REQUEST_METHOD'], $uri);
+    $router->dispatch($_SERVER['REQUEST_METHOD'], $requestUri);
 } catch (InvalidArgumentException $e) {
     json_error($e->getMessage(), 422);
 } catch (RuntimeException $e) {

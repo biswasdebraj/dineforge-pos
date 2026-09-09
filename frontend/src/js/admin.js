@@ -6,6 +6,36 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+async function renderLanConnect(box) {
+  if (!window.dineforge?.getLanInfo) {
+    box.innerHTML = '<div class="empty-hint">Only available in the desktop app, not a browser tab.</div>';
+    return;
+  }
+
+  let info;
+  try {
+    info = await window.dineforge.getLanInfo();
+  } catch (err) {
+    box.innerHTML = `<div class="empty-hint">Could not determine LAN address: ${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (!info.available) {
+    box.innerHTML = '<div class="empty-hint">No network connection found — connect this computer to Wi-Fi or Ethernet to allow other devices to sign in.</div>';
+    return;
+  }
+
+  box.innerHTML = `
+    <div style="display:flex; gap:1rem; align-items:center;">
+      <img src="${info.qrDataUrl}" alt="QR code" width="160" height="160" style="border-radius:8px;" />
+      <div>
+        <p class="empty-hint" style="margin:0 0 0.5rem;">Scan with a phone or tablet on the same Wi-Fi to sign in as Waiter or Kitchen from that device.</p>
+        <code>${escapeHtml(info.url)}</code>
+      </div>
+    </div>
+  `;
+}
+
 let root = null;
 let categories = [];
 let items = [];
@@ -354,7 +384,14 @@ function renderSettings() {
         </div>`;
       })
       .join('')}
+
+    <div class="section-title">Connect a Device</div>
+    <div id="lanConnectBox">
+      <div class="empty-hint">Loading…</div>
+    </div>
   `;
+
+  renderLanConnect(panel.querySelector('#lanConnectBox'));
 
   panel.querySelector('#backupNowBtn').addEventListener('click', async () => {
     try {

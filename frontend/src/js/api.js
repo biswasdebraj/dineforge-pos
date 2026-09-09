@@ -2,10 +2,20 @@ async function getApiBase() {
   if (window.dineforge && window.dineforge.getApiBase) {
     return window.dineforge.getApiBase();
   }
-  // Fallback for testing this page directly in a regular browser tab,
-  // outside Electron: ?api_base=http://127.0.0.1:8899
+  // ?api_base=... overrides for manual testing regardless of context.
   const override = new URLSearchParams(window.location.search).get('api_base');
-  return override || 'http://127.0.0.1:8899';
+  if (override) return override;
+
+  // Not running inside Electron: either a LAN/mobile device that loaded this
+  // page directly from the backend (same origin serves both the API and the
+  // static frontend — see backend/src/support/static_frontend.php), or a
+  // plain browser tab testing against a standalone php -S. Either way the
+  // API lives at the origin the page itself was loaded from.
+  if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
+    return window.location.origin;
+  }
+
+  return 'http://127.0.0.1:8899';
 }
 
 function qs(params) {

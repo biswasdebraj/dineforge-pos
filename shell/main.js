@@ -2,7 +2,9 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain } = 
 const path = require('path');
 const net = require('net');
 const http = require('http');
+const os = require('os');
 const { spawn } = require('child_process');
+const QRCode = require('qrcode');
 const logger = require('./logger');
 const printerModule = require('./printer');
 
@@ -54,11 +56,23 @@ function spawnPhpProcess(port) {
   const phpBinary = getPhpBinaryPath();
   const phpIni = path.join(path.dirname(phpBinary), 'php.ini');
   const dataDir = path.join(app.getPath('userData'), 'data');
+  const frontendDir = resourcePath('frontend', 'src');
 
-  const child = spawn(phpBinary, ['-c', phpIni, '-S', `127.0.0.1:${port}`, '-t', docroot], {
+  // 0.0.0.0 (not 127.0.0.1) so LAN devices — waiters/kitchen tablets
+  // scanning the QR code — can reach it too, not just this machine. Every
+  // protected route already requires a valid role session regardless of
+  // which interface the request arrived on (see backend/src/support/guard.php),
+  // so this doesn't weaken anything that matters.
+  // index.php is passed explicitly as the router script — without one, PHP's
+  // built-in server only falls through to index.php for extensionless URLs
+  // (like /api/ping); a URL with a file extension (/styles.css, /js/app.js)
+  // that doesn't exist under docroot gets a 404 straight from the PHP server
+  // itself, never reaching serve_static_frontend() in index.php.
+  const routerScript = path.join(docroot, 'index.php');
+  const child = spawn(phpBinary, ['-c', phpIni, '-S', `0.0.0.0:${port}`, '-t', docroot, routerScript], {
     cwd: docroot,
     windowsHide: true,
-    env: { ...process.env, DINEFORGE_DATA_DIR: dataDir },
+    env: { ...process.env, DINEFORGE_DATA_DIR: dataDir, DINEFORGE_FRONTEND_DIR: frontendDir },
   });
 
   child.stdout.on('data', (d) => logger.info(`[php] ${d}`.trim()));
@@ -229,6 +243,33 @@ async function createWindow() {
 }
 
 ipcMain.handle('get-api-port', () => currentApiPort);
+
+function getLanIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return null;
+}
+
+ipcMain.handle('get-lan-info', async () => {
+  const ip = getLanIp();
+  if (!ip || !currentApiPort) {
+    return { available: false };
+  }
+  const url = `http://${ip}:${currentApiPort}/`;
+  try {
+    const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 240 });
+    return { available: true, url, qrDataUrl };
+  } catch (err) {
+    logger.error(`QR code generation failed: ${err.message}`);
+    return { available: false, url };
+  }
+});
 
 function fetchJson(path) {
   return new Promise((resolve, reject) => {

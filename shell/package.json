@@ -16,7 +16,8 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "node-thermal-printer": "^4.6.1"
+    "node-thermal-printer": "^4.6.1",
+    "qrcode": "^1.5.4"
   },
   "build": {
     "appId": "com.dineforge.pos",
@@ -33,13 +34,25 @@
       "!resources/php/**"
     ],
     "extraResources": [
-      { "from": "resources/php", "to": "php" },
+      {
+        "from": "resources/php",
+        "to": "php"
+      },
       {
         "from": "../backend",
         "to": "backend",
-        "filter": ["**/*", "!data/*.sqlite*", "!vendor/**", "!tests/**", "!.phpunit.cache/**"]
+        "filter": [
+          "**/*",
+          "!data/*.sqlite*",
+          "!vendor/**",
+          "!tests/**",
+          "!.phpunit.cache/**"
+        ]
       },
-      { "from": "../frontend", "to": "frontend" }
+      {
+        "from": "../frontend",
+        "to": "frontend"
+      }
     ],
     "win": {
       "target": "nsis",
