@@ -56,6 +56,9 @@ async function printReceipt(settings, order) {
   printer.setTextNormal();
   printer.bold(false);
   printer.println(`Order #${order.order_number}`);
+  if (order.customer_name) {
+    printer.println(`Customer: ${order.customer_name}`);
+  }
   printer.println(new Date(order.opened_at.replace(' ', 'T')).toLocaleString());
   printer.drawLine();
 

@@ -191,6 +191,10 @@ $router->delete('/api/orders/{id}/discounts/{discountId}', function (array $p) u
 $router->post('/api/orders/{id}/send', function (array $p) use ($orderService) {
     json_response($orderService->sendToKitchen((int) $p['id']));
 });
+$router->put('/api/orders/{id}/customer', function (array $p) use ($orderService) {
+    $input = json_body();
+    json_response($orderService->updateCustomerName((int) $p['id'], $input['customer_name'] ?? null));
+});
 $router->post('/api/orders/{id}/void', function (array $p) use ($orderService) {
     json_response($orderService->voidOrder((int) $p['id']));
 });

@@ -35,9 +35,12 @@ final class OrderService
 
         $orderNumber = $this->generateOrderNumber();
 
+        $customerName = isset($input['customer_name']) ? trim((string) $input['customer_name']) : null;
+        $customerName = $customerName === '' ? null : $customerName;
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO orders (order_number, shift_id, table_id, order_type, notes)
-             VALUES (:order_number, :shift_id, :table_id, :order_type, :notes)'
+            'INSERT INTO orders (order_number, shift_id, table_id, order_type, notes, customer_name)
+             VALUES (:order_number, :shift_id, :table_id, :order_type, :notes, :customer_name)'
         );
         $stmt->execute([
             'order_number' => $orderNumber,
@@ -45,6 +48,7 @@ final class OrderService
             'table_id' => $tableId,
             'order_type' => $orderType,
             'notes' => $input['notes'] ?? null,
+            'customer_name' => $customerName,
         ]);
 
         $orderId = (int) $this->pdo->lastInsertId();
@@ -215,6 +219,19 @@ final class OrderService
             $this->recalculateTotals($orderId);
             return $this->getFull($orderId);
         });
+    }
+
+    public function updateCustomerName(int $orderId, ?string $customerName): array
+    {
+        $this->requireOpenOrder($orderId);
+
+        $customerName = $customerName !== null ? trim($customerName) : null;
+        $customerName = $customerName === '' ? null : $customerName;
+
+        $stmt = $this->pdo->prepare('UPDATE orders SET customer_name = :customer_name WHERE id = :id');
+        $stmt->execute(['customer_name' => $customerName, 'id' => $orderId]);
+
+        return $this->getFull($orderId);
     }
 
     public function updateItemStatus(int $orderId, int $itemId, string $status): array

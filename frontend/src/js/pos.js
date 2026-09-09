@@ -28,9 +28,16 @@ export async function init(root, ctx) {
             <option value="delivery">Delivery</option>
           </select>
           <select id="tableSelect"><option value="">No table</option></select>
+        </div>
+        <div class="order-meta">
+          <input id="customerNameInput" type="text" placeholder="Customer name (optional)" style="flex:1" />
           <button class="btn" id="newOrderBtn">New Order</button>
         </div>
         <div id="orderLabel" class="empty-hint">No order selected</div>
+        <div id="orderCustomerRow" class="empty-hint" hidden>
+          <span id="orderCustomerText"></span>
+          <button class="inline-btn" id="editCustomerBtn">Edit</button>
+        </div>
         <div class="cart-items" id="cartItems"></div>
         <div class="cart-totals" id="cartTotals"></div>
         <div class="cart-actions">
@@ -50,7 +57,11 @@ export async function init(root, ctx) {
     orderTypeSelect: root.querySelector('#orderTypeSelect'),
     tableSelect: root.querySelector('#tableSelect'),
     newOrderBtn: root.querySelector('#newOrderBtn'),
+    customerNameInput: root.querySelector('#customerNameInput'),
     orderLabel: root.querySelector('#orderLabel'),
+    orderCustomerRow: root.querySelector('#orderCustomerRow'),
+    orderCustomerText: root.querySelector('#orderCustomerText'),
+    editCustomerBtn: root.querySelector('#editCustomerBtn'),
     cartItems: root.querySelector('#cartItems'),
     cartTotals: root.querySelector('#cartTotals'),
     discountBtn: root.querySelector('#discountBtn'),
@@ -60,6 +71,7 @@ export async function init(root, ctx) {
   };
 
   els.newOrderBtn.addEventListener('click', onNewOrder);
+  els.editCustomerBtn.addEventListener('click', onEditCustomerName);
   els.orderPicker.addEventListener('change', onPickOrder);
   els.sendBtn.addEventListener('click', onSendToKitchen);
   els.voidOrderBtn.addEventListener('click', onVoidOrder);
@@ -146,7 +158,10 @@ export async function refresh() {
   els.orderPicker.innerHTML =
     '<option value="">— Select an open order —</option>' +
     active
-      .map((o) => `<option value="${o.id}">#${o.order_number} · ${describeOrder(o)}</option>`)
+      .map((o) => {
+        const customer = o.customer_name ? ` · ${escapeHtml(o.customer_name)}` : '';
+        return `<option value="${o.id}">#${o.order_number} · ${describeOrder(o)}${customer}</option>`;
+      })
       .join('');
 
   if (previousSelection && active.some((o) => o.id === previousSelection)) {
@@ -225,12 +240,45 @@ async function onNewOrder() {
   try {
     const orderType = els.orderTypeSelect.value;
     const tableId = els.tableSelect.value || null;
-    currentOrder = await api.orders.create({ order_type: orderType, table_id: tableId });
+    const customerName = els.customerNameInput.value.trim() || null;
+    currentOrder = await api.orders.create({ order_type: orderType, table_id: tableId, customer_name: customerName });
+    els.customerNameInput.value = '';
     await refresh();
     els.orderPicker.value = String(currentOrder.id);
   } catch (err) {
     toast(err.message, true);
   }
+}
+
+function onEditCustomerName() {
+  if (!currentOrder) return;
+  showModal(
+    `
+    <h2>Customer Name</h2>
+    <div class="form-row">
+      <label>Name</label>
+      <input id="custNameInput" type="text" value="${escapeHtml(currentOrder.customer_name || '')}" placeholder="Optional" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="custCancel">Cancel</button>
+      <button class="btn primary" id="custSave">Save</button>
+    </div>
+  `,
+    (modal) => {
+      const input = modal.querySelector('#custNameInput');
+      input.focus();
+      modal.querySelector('#custCancel').addEventListener('click', closeModal);
+      modal.querySelector('#custSave').addEventListener('click', async () => {
+        try {
+          currentOrder = await api.orders.updateCustomer(currentOrder.id, input.value.trim());
+          closeModal();
+          renderCart();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+    }
+  );
 }
 
 async function onPickOrder() {
@@ -252,6 +300,7 @@ function renderCart() {
   if (!currentOrder) {
     els.orderLabel.textContent = 'No order selected';
     els.orderLabel.classList.add('empty-hint');
+    els.orderCustomerRow.hidden = true;
     els.cartItems.innerHTML = '';
     els.cartTotals.innerHTML = '';
     setActionsEnabled(false);
@@ -260,6 +309,13 @@ function renderCart() {
 
   els.orderLabel.classList.remove('empty-hint');
   els.orderLabel.textContent = `Order #${currentOrder.order_number} · ${describeOrder(currentOrder)} · ${currentOrder.status.replace(/_/g, ' ')}`;
+
+  const editable = ['open', 'sent_to_kitchen'].includes(currentOrder.status);
+  els.orderCustomerRow.hidden = false;
+  els.orderCustomerText.textContent = currentOrder.customer_name
+    ? `Customer: ${currentOrder.customer_name}`
+    : 'No customer name set';
+  els.editCustomerBtn.hidden = !editable;
 
   if (currentOrder.items.length === 0) {
     els.cartItems.innerHTML = '<div class="empty-hint">No items yet — tap a menu item to add it.</div>';
@@ -309,7 +365,6 @@ function renderCart() {
     <div class="row total"><span>Total</span><span>${money(currentOrder.total_cents, currencySymbol)}</span></div>
   `;
 
-  const editable = ['open', 'sent_to_kitchen'].includes(currentOrder.status);
   setActionsEnabled(editable, currentOrder);
 }
 

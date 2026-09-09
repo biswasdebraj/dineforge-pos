@@ -93,6 +93,8 @@ export const api = {
     applyDiscount: (id, body) => apiFetch(`/api/orders/${id}/discounts`, { method: 'POST', body: JSON.stringify(body) }),
     removeDiscount: (id, discountId) => apiFetch(`/api/orders/${id}/discounts/${discountId}`, { method: 'DELETE' }),
     send: (id) => apiFetch(`/api/orders/${id}/send`, { method: 'POST' }),
+    updateCustomer: (id, customerName) =>
+      apiFetch(`/api/orders/${id}/customer`, { method: 'PUT', body: JSON.stringify({ customer_name: customerName }) }),
     void: (id) => apiFetch(`/api/orders/${id}/void`, { method: 'POST' }),
     pay: (id, body) => apiFetch(`/api/orders/${id}/payments`, { method: 'POST', body: JSON.stringify(body) }),
   },

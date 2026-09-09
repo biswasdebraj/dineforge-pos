@@ -29,6 +29,27 @@ final class OrderServiceTest extends TestCase
         $this->assertSame('open', $a['status']);
     }
 
+    public function testCreateOrderStoresCustomerName(): void
+    {
+        $order = $this->orders->create(['customer_name' => '  John Smith  ']);
+        $this->assertSame('John Smith', $order['customer_name']);
+
+        $blank = $this->orders->create(['customer_name' => '   ']);
+        $this->assertNull($blank['customer_name']);
+    }
+
+    public function testUpdateCustomerName(): void
+    {
+        $order = $this->orders->create([]);
+        $this->assertNull($order['customer_name']);
+
+        $updated = $this->orders->updateCustomerName((int) $order['id'], 'Jane Doe');
+        $this->assertSame('Jane Doe', $updated['customer_name']);
+
+        $cleared = $this->orders->updateCustomerName((int) $order['id'], '');
+        $this->assertNull($cleared['customer_name']);
+    }
+
     public function testCreateOrderRejectsInvalidType(): void
     {
         $this->expectException(InvalidArgumentException::class);
