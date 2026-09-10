@@ -1,4 +1,4 @@
-import { api, money, toast, escapeHtml, showModal, closeModal } from './api.js';
+import { api, money, toast, escapeHtml, showModal, closeModal, apiUrl } from './api.js';
 
 let categories = [];
 let items = [];
@@ -7,11 +7,13 @@ let activeCategoryId = null;
 let currentOrder = null;
 let currencySymbol = '$';
 let gstScheme = 'regular';
+let apiBase = '';
 let els = {};
 
 export async function init(root, ctx) {
   currencySymbol = ctx.currencySymbol;
   gstScheme = ctx.gstScheme;
+  apiBase = await apiUrl('');
 
   root.innerHTML = `
     <div class="pos-layout">
@@ -213,6 +215,7 @@ function renderItemGrid() {
     .map(
       (i) => `
       <button class="item-card" data-id="${i.id}">
+        ${i.image_path ? `<img class="item-card-image" src="${apiBase}/api/menu/images/${i.image_path}" alt="" />` : ''}
         <div class="name">${escapeHtml(i.name)}</div>
         <div class="price">${money(i.price_cents, currencySymbol)}</div>
       </button>`

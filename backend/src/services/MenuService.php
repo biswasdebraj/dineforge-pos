@@ -4,8 +4,28 @@ declare(strict_types=1);
 
 final class MenuService
 {
-    public function __construct(private PDO $pdo)
+    private const ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
+
+    // $imagesDir defaults lazily to get_data_dir() . '/menu-images' (real
+    // app/dev use) rather than being resolved eagerly here, so tests can
+    // pass an isolated temp directory instead without get_data_dir() ever
+    // touching the real userData/dev data folder.
+    public function __construct(private PDO $pdo, private ?string $imagesDir = null)
     {
+    }
+
+    private function imagesDir(): string
+    {
+        $dir = $this->imagesDir ?? (get_data_dir() . '/menu-images');
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        return $dir;
+    }
+
+    public function getImagesDir(): string
+    {
+        return $this->imagesDir();
     }
 
     public function listCategories(): array
@@ -184,11 +204,16 @@ final class MenuService
 
     public function deleteItem(int $id): void
     {
+        $item = $this->findItem($id);
         try {
             $stmt = $this->pdo->prepare('DELETE FROM menu_items WHERE id = :id');
             $stmt->execute(['id' => $id]);
         } catch (PDOException $e) {
             throw new RuntimeException('Cannot delete menu item — it appears in past orders. Deactivate it instead.', 0, $e);
+        }
+
+        if ($item !== null && !empty($item['image_path'])) {
+            $this->deleteImageFile($item['image_path']);
         }
     }
 
@@ -198,5 +223,61 @@ final class MenuService
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row === false ? null : $row;
+    }
+
+    // $sourcePath is a filesystem path to already-uploaded bytes (typically
+    // $_FILES[...]['tmp_name']) — copied rather than moved, since PHP's own
+    // temp-upload cleanup handles the original and copy() works the same
+    // whether the source is a real PHP upload or a test fixture file.
+    public function setItemImage(int $id, string $sourcePath, string $originalFilename): array
+    {
+        $item = $this->findItem($id);
+        if ($item === null) {
+            throw new RuntimeException('Menu item not found');
+        }
+
+        $ext = strtolower(pathinfo($originalFilename, PATHINFO_EXTENSION));
+        if (!in_array($ext, self::ALLOWED_IMAGE_EXTENSIONS, true)) {
+            throw new InvalidArgumentException('Image must be JPG, PNG, or WEBP');
+        }
+
+        if (!empty($item['image_path'])) {
+            $this->deleteImageFile($item['image_path']);
+        }
+
+        $filename = sprintf('item-%d-%s.%s', $id, bin2hex(random_bytes(4)), $ext);
+        if (!copy($sourcePath, $this->imagesDir() . '/' . $filename)) {
+            throw new RuntimeException('Could not save image');
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE menu_items SET image_path = :image_path, updated_at = datetime('now') WHERE id = :id");
+        $stmt->execute(['image_path' => $filename, 'id' => $id]);
+
+        return $this->findItem($id);
+    }
+
+    public function removeItemImage(int $id): array
+    {
+        $item = $this->findItem($id);
+        if ($item === null) {
+            throw new RuntimeException('Menu item not found');
+        }
+
+        if (!empty($item['image_path'])) {
+            $this->deleteImageFile($item['image_path']);
+        }
+
+        $stmt = $this->pdo->prepare("UPDATE menu_items SET image_path = NULL, updated_at = datetime('now') WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+
+        return $this->findItem($id);
+    }
+
+    private function deleteImageFile(string $filename): void
+    {
+        $path = $this->imagesDir() . '/' . basename($filename);
+        if (is_file($path)) {
+            unlink($path);
+        }
     }
 }

@@ -115,6 +115,7 @@ main#views { flex: 1; overflow: hidden; position: relative; }
 .item-card:hover { border-color: var(--accent); }
 .item-card .name { font-weight: 600; margin-bottom: 0.35rem; }
 .item-card .price { color: var(--accent); font-weight: 600; }
+.item-card-image { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; margin-bottom: 0.5rem; }
 .empty-hint { color: var(--text-dim); padding: 1rem; }
 
 .cart-panel {
@@ -190,6 +191,7 @@ table.data-table th { color: var(--text-dim); font-weight: 600; font-size: 0.85r
 .report-card { background: var(--panel-alt); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
 .report-label { font-size: 0.8rem; color: var(--text-dim); }
 .report-value { font-size: 1.3rem; font-weight: 700; margin-top: 0.2rem; }
+.item-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; vertical-align: middle; margin-right: 0.4rem; }
 .inline-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 0.85rem; padding: 0.2rem 0.4rem; }
 .inline-btn.danger { color: var(--danger); }
 

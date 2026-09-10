@@ -87,8 +87,9 @@ export async function refresh() {
   renderSettings();
 }
 
-function renderMenu() {
+async function renderMenu() {
   const panel = root.querySelector('#admin-menu');
+  const apiBase = await apiUrl('');
   panel.innerHTML = `
     <div class="section-title">Import Menu from Excel</div>
     <div class="form-row">
@@ -127,12 +128,18 @@ function renderMenu() {
 
     <div class="section-title">Menu Items</div>
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Category</th><th>Price</th><th>SKU / Barcode</th><th>Active</th><th></th></tr></thead>
+      <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>SKU / Barcode</th><th>Active</th><th></th></tr></thead>
       <tbody>
         ${items
           .map(
             (i) => `
           <tr data-id="${i.id}">
+            <td>
+              ${i.image_path ? `<img class="item-thumb" src="${apiBase}/api/menu/images/${i.image_path}" alt="" />` : '<span class="empty-hint">None</span>'}
+              <input type="file" class="item-image-input" accept=".jpg,.jpeg,.png,.webp" hidden />
+              <button class="inline-btn item-image-upload" type="button">${i.image_path ? 'Change' : 'Add'}</button>
+              ${i.image_path ? '<button class="inline-btn danger item-image-remove" type="button">Remove</button>' : ''}
+            </td>
             <td><input class="item-name" value="${escapeHtml(i.name)}" /></td>
             <td>
               <select class="item-category">
@@ -182,6 +189,29 @@ function renderMenu() {
       })
     );
     row.querySelector('.item-delete')?.addEventListener('click', () => deleteItem(id));
+
+    const imageInput = row.querySelector('.item-image-input');
+    row.querySelector('.item-image-upload')?.addEventListener('click', () => imageInput.click());
+    imageInput?.addEventListener('change', async () => {
+      const file = imageInput.files[0];
+      if (!file) return;
+      try {
+        await api.items.uploadImage(id, file);
+        await refresh();
+        toast('Image updated');
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+    row.querySelector('.item-image-remove')?.addEventListener('click', async () => {
+      try {
+        await api.items.removeImage(id);
+        await refresh();
+        toast('Image removed');
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
   });
 
   panel.querySelector('#downloadTemplateLink').addEventListener('click', async (e) => {

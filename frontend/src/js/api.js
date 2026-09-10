@@ -88,6 +88,10 @@ export async function apiUrl(path) {
   return `${await getApiBase()}${path}`;
 }
 
+export async function itemImageUrl(imagePath) {
+  return imagePath ? apiUrl(`/api/menu/images/${imagePath}`) : null;
+}
+
 export async function uploadFile(path, file) {
   const base = await getApiBase();
   const session = getSession();
@@ -172,6 +176,8 @@ export const api = {
     create: (body) => apiFetch('/api/menu/items', { method: 'POST', body: JSON.stringify(body) }),
     update: (id, body) => apiFetch(`/api/menu/items/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     remove: (id) => apiFetch(`/api/menu/items/${id}`, { method: 'DELETE' }),
+    uploadImage: (id, file) => uploadFile(`/api/menu/items/${id}/image`, file),
+    removeImage: (id) => apiFetch(`/api/menu/items/${id}/image`, { method: 'DELETE' }),
   },
   tables: {
     list: () => apiFetch('/api/tables'),

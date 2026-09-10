@@ -25,7 +25,7 @@ require_once __DIR__ . '/../src/services/AuthService.php';
 require_once __DIR__ . '/../src/services/ReportService.php';
 
 $pdo = get_db_connection();
-$menuService = new MenuService($pdo);
+$menuService = new MenuService($pdo, get_data_dir() . '/menu-images');
 $menuImportService = new MenuImportService($menuService);
 $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
@@ -116,6 +116,37 @@ $router->delete('/api/menu/items/{id}', guarded($authService, ['admin'], functio
     $menuService->deleteItem((int) $p['id']);
     json_response(['status' => 'ok']);
 }));
+$router->post('/api/menu/items/{id}/image', guarded($authService, ['admin'], function (array $p) use ($menuService) {
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        json_error('No file uploaded', 400);
+    }
+    try {
+        json_response($menuService->setItemImage((int) $p['id'], $_FILES['file']['tmp_name'], $_FILES['file']['name']));
+    } catch (InvalidArgumentException $e) {
+        json_error($e->getMessage(), 422);
+    }
+}));
+$router->delete('/api/menu/items/{id}/image', guarded($authService, ['admin'], function (array $p) use ($menuService) {
+    json_response($menuService->removeItemImage((int) $p['id']));
+}));
+// Public, same reasoning as menu reads generally — item photos aren't
+// sensitive and need to render in the POS grid before/without login.
+// Path-traversal-safe: {filename} is resolved and must stay inside the
+// images dir, same pattern as serve_static_frontend().
+$router->get('/api/menu/images/{filename}', function (array $p) use ($menuService) {
+    $imagesDir = realpath($menuService->getImagesDir());
+    $filePath = $imagesDir === false ? false : realpath($imagesDir . '/' . basename($p['filename']));
+    if ($imagesDir === false || $filePath === false || strpos($filePath, $imagesDir) !== 0 || !is_file($filePath)) {
+        http_response_code(404);
+        exit;
+    }
+    $mimeTypes = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    header('Content-Type: ' . ($mimeTypes[$ext] ?? 'application/octet-stream'));
+    header('Cache-Control: public, max-age=86400');
+    readfile($filePath);
+    exit;
+});
 
 // Public — it's a blank template with no restaurant data, and a plain link
 // navigation (needed for the browser's normal download handling) can't

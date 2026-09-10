@@ -4,6 +4,110 @@ declare(strict_types=1);
 
 final class MenuServiceTest extends TestCase
 {
+    private array $tempDirs = [];
+    private array $tempFiles = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->tempFiles as $file) {
+            if (file_exists($file)) {
+                unlink($file);
+            }
+        }
+        foreach ($this->tempDirs as $dir) {
+            if (is_dir($dir)) {
+                foreach (glob($dir . '/*') as $leftover) {
+                    unlink($leftover);
+                }
+                rmdir($dir);
+            }
+        }
+        parent::tearDown();
+    }
+
+    private function makeMenuWithImages(): MenuService
+    {
+        $dir = sys_get_temp_dir() . '/dineforge-menu-images-test-' . uniqid();
+        $this->tempDirs[] = $dir;
+        return new MenuService($this->pdo, $dir);
+    }
+
+    private function makeFakeImage(string $ext = 'jpg'): string
+    {
+        $file = tempnam(sys_get_temp_dir(), 'dineforge-fake-image-') . '.' . $ext;
+        file_put_contents($file, 'fake image bytes');
+        $this->tempFiles[] = $file;
+        return $file;
+    }
+
+    public function testSetItemImageStoresFileAndPath(): void
+    {
+        $menu = $this->makeMenuWithImages();
+        $cat = $this->makeCategory($menu);
+        $item = $this->makeItem($menu, (int) $cat['id']);
+        $source = $this->makeFakeImage('png');
+
+        $updated = $menu->setItemImage((int) $item['id'], $source, 'photo.png');
+
+        $this->assertNotEmpty($updated['image_path']);
+        $this->assertStringEndsWith('.png', $updated['image_path']);
+        $this->assertFileExists($menu->getImagesDir() . '/' . $updated['image_path']);
+    }
+
+    public function testSetItemImageRejectsDisallowedExtension(): void
+    {
+        $menu = $this->makeMenuWithImages();
+        $cat = $this->makeCategory($menu);
+        $item = $this->makeItem($menu, (int) $cat['id']);
+        $source = $this->makeFakeImage('gif');
+
+        $this->expectException(InvalidArgumentException::class);
+        $menu->setItemImage((int) $item['id'], $source, 'photo.gif');
+    }
+
+    public function testReplacingImageDeletesThePreviousFile(): void
+    {
+        $menu = $this->makeMenuWithImages();
+        $cat = $this->makeCategory($menu);
+        $item = $this->makeItem($menu, (int) $cat['id']);
+
+        $first = $menu->setItemImage((int) $item['id'], $this->makeFakeImage('jpg'), 'a.jpg');
+        $firstPath = $menu->getImagesDir() . '/' . $first['image_path'];
+        $this->assertFileExists($firstPath);
+
+        $second = $menu->setItemImage((int) $item['id'], $this->makeFakeImage('png'), 'b.png');
+
+        $this->assertFileDoesNotExist($firstPath);
+        $this->assertFileExists($menu->getImagesDir() . '/' . $second['image_path']);
+    }
+
+    public function testRemoveItemImageDeletesFileAndClearsPath(): void
+    {
+        $menu = $this->makeMenuWithImages();
+        $cat = $this->makeCategory($menu);
+        $item = $this->makeItem($menu, (int) $cat['id']);
+        $set = $menu->setItemImage((int) $item['id'], $this->makeFakeImage(), 'a.jpg');
+        $imagePath = $menu->getImagesDir() . '/' . $set['image_path'];
+
+        $result = $menu->removeItemImage((int) $item['id']);
+
+        $this->assertNull($result['image_path']);
+        $this->assertFileDoesNotExist($imagePath);
+    }
+
+    public function testDeletingItemCleansUpItsImageFile(): void
+    {
+        $menu = $this->makeMenuWithImages();
+        $cat = $this->makeCategory($menu);
+        $item = $this->makeItem($menu, (int) $cat['id']);
+        $set = $menu->setItemImage((int) $item['id'], $this->makeFakeImage(), 'a.jpg');
+        $imagePath = $menu->getImagesDir() . '/' . $set['image_path'];
+
+        $menu->deleteItem((int) $item['id']);
+
+        $this->assertFileDoesNotExist($imagePath);
+    }
+
     public function testCreateAndListCategories(): void
     {
         $menu = new MenuService($this->pdo);
