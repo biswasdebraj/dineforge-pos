@@ -1,4 +1,4 @@
-import { api, toast, escapeHtml, CURRENCIES, money, showModal, closeModal, apiUrl } from './api.js';
+import { api, toast, escapeHtml, CURRENCIES, money, showModal, closeModal, apiUrl, getSession } from './api.js';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -758,7 +758,7 @@ function renderSettings() {
       toast('Printing is only available in the desktop app', true);
       return;
     }
-    const result = await window.dineforge.testPrint();
+    const result = await window.dineforge.testPrint(getSession()?.token);
     toast(result.message || (result.success ? 'Test print sent' : 'Test print failed'), !result.success);
   });
 
@@ -767,7 +767,7 @@ function renderSettings() {
       toast('Printing is only available in the desktop app', true);
       return;
     }
-    const result = await window.dineforge.openCashDrawer();
+    const result = await window.dineforge.openCashDrawer(getSession()?.token);
     if (!result.success) {
       toast(result.message || 'Could not open cash drawer', true);
     }

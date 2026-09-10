@@ -1,4 +1,4 @@
-import { api, money, toast, escapeHtml, showModal, closeModal, apiUrl } from './api.js';
+import { api, money, toast, escapeHtml, showModal, closeModal, apiUrl, getSession } from './api.js';
 
 let categories = [];
 let items = [];
@@ -484,7 +484,7 @@ async function onSendToKitchen() {
     renderCart();
 
     if (newlySentIds.length && window.dineforge?.printKOT) {
-      window.dineforge.printKOT(currentOrder.id, newlySentIds).then((r) => {
+      window.dineforge.printKOT(currentOrder.id, newlySentIds, getSession()?.token).then((r) => {
         if (!r.success) toast(r.message || 'KOT did not print', true);
       });
     }
@@ -501,7 +501,7 @@ async function onPrintKOT() {
   }
   const itemIds = currentOrder.items.filter((i) => i.status !== 'pending' && i.status !== 'void').map((i) => i.id);
   if (!itemIds.length) return;
-  const r = await window.dineforge.printKOT(currentOrder.id, itemIds);
+  const r = await window.dineforge.printKOT(currentOrder.id, itemIds, getSession()?.token);
   if (!r.success) toast(r.message || 'KOT did not print', true);
   else toast('KOT sent to printer');
 }
@@ -623,12 +623,12 @@ function onOpenPaymentModal() {
         await refresh();
 
         if (method === 'cash' && window.dineforge?.openCashDrawer) {
-          window.dineforge.openCashDrawer().then((r) => {
+          window.dineforge.openCashDrawer(getSession()?.token).then((r) => {
             if (!r.success) toast(r.message || 'Could not open cash drawer', true);
           });
         }
         if (shouldPrint && window.dineforge?.printReceipt) {
-          window.dineforge.printReceipt(paidOrderId).then((r) => {
+          window.dineforge.printReceipt(paidOrderId, getSession()?.token).then((r) => {
             if (!r.success) toast(r.message || 'Receipt did not print', true);
           });
         }

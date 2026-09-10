@@ -8,10 +8,13 @@ contextBridge.exposeInMainWorld('dineforge', {
   onBackendRestarted: (callback) => {
     ipcRenderer.on('backend-restarted', () => callback());
   },
-  testPrint: () => ipcRenderer.invoke('test-print'),
+  // token is the caller's own X-Session-Token (from sessionStorage) — GET
+  // /api/orders/{id} requires a valid role session, so the main process
+  // needs it passed through to authenticate its own fetch on our behalf.
+  testPrint: (token) => ipcRenderer.invoke('test-print', token),
   listUsbPrinters: () => ipcRenderer.invoke('list-usb-printers'),
-  openCashDrawer: () => ipcRenderer.invoke('open-cash-drawer'),
-  printReceipt: (orderId) => ipcRenderer.invoke('print-receipt', orderId),
-  printKOT: (orderId, itemIds) => ipcRenderer.invoke('print-kot', orderId, itemIds),
+  openCashDrawer: (token) => ipcRenderer.invoke('open-cash-drawer', token),
+  printReceipt: (orderId, token) => ipcRenderer.invoke('print-receipt', orderId, token),
+  printKOT: (orderId, itemIds, token) => ipcRenderer.invoke('print-kot', orderId, itemIds, token),
   getLanInfo: () => ipcRenderer.invoke('get-lan-info'),
 });

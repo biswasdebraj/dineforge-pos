@@ -6,6 +6,7 @@
 const { test, expect, _electron } = require('@playwright/test');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 
 // Matches Electron's default userData path (app.getPath('userData')), which
 // is based on package.json's "name" field, not electron-builder's
@@ -165,5 +166,69 @@ test.describe('DineForge POS smoke test', () => {
     // into any future test added after it in this file.
     await window.locator('input[name="printerConnection"][value="network"]').check();
     await window.locator('#savePrinterBtn').click();
+  });
+
+  test('printing against a real reachable printer: no crash, correct content', async () => {
+    // Every other test in this file only ever exercises the "no printer
+    // configured" failure path — buildPrinter() throws before ever touching
+    // the order object. That masked a real bug for the whole session: the
+    // main process's internal fetchJson() (used to re-fetch the order/
+    // settings/tables for a print job) never attached the caller's session
+    // token, so GET /api/orders/{id} (role-guarded) 401ed and printKOT/
+    // printReceipt crashed on the resulting error object instead of the
+    // real order ("Cannot read properties of undefined (reading 'filter')").
+    // A fake local TCP "printer" lets this test actually reach the success
+    // path and prove the whole pipeline — auth included — works.
+    let received = Buffer.alloc(0);
+    const server = net.createServer((socket) => {
+      socket.on('data', (chunk) => {
+        received = Buffer.concat([received, chunk]);
+      });
+      socket.on('error', () => {});
+    });
+    const printerPort = await new Promise((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve(server.address().port));
+    });
+
+    try {
+      const apiBase = await window.evaluate(() => window.dineforge.getApiBase());
+      const token = await window.evaluate(() => JSON.parse(sessionStorage.getItem('dineforge_session')).token);
+      const authHeaders = { 'Content-Type': 'application/json', 'X-Session-Token': token };
+
+      await fetch(`${apiBase}/api/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ printer_connection: 'network', printer_ip: '127.0.0.1', printer_port: String(printerPort) }),
+      });
+
+      await window.reload();
+      await window.waitForLoadState('domcontentloaded');
+      await window.getByRole('button', { name: 'New Order' }).click();
+      await expect(window.locator('#orderLabel')).toContainText(/Order #\d{8}-\d{4}/);
+      await window.getByRole('button', { name: 'E2E Burger' }).click();
+      await expect(window.locator('.cart-totals')).toContainText('$9.99');
+
+      await window.getByRole('button', { name: 'Send to Kitchen' }).click();
+      await expect(window.locator('#orderLabel')).toContainText('sent to kitchen');
+
+      // The auto KOT print above is fire-and-forget from the app's side, so
+      // give it a moment, then confirm no error toast appeared and the
+      // "printer" actually received bytes containing real order content.
+      await window.waitForTimeout(1500);
+      await expect(window.getByText(/Cannot read propert/i)).toHaveCount(0);
+      expect(received.length).toBeGreaterThan(0);
+      expect(received.toString('latin1')).toContain('E2E Burger');
+
+      // Reset back to unconfigured so later runs of this same describe
+      // block (or any future test appended after this one) still hit the
+      // well-understood "not configured" path instead of this fake one.
+      await fetch(`${apiBase}/api/settings`, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ printer_ip: '', printer_port: '9100' }),
+      });
+    } finally {
+      server.close();
+    }
   });
 });

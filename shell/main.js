@@ -356,17 +356,31 @@ ipcMain.handle('get-lan-info', async () => {
   }
 });
 
-function fetchJson(path) {
+// `token` is the caller's own X-Session-Token, passed through from the
+// renderer on every invoke below — GET /api/orders/{id} is role-guarded
+// (waiter/kitchen/admin), so without it this 401s and resolves to
+// {status:'error',...} instead of the order, which printReceipt/printKOT
+// then crash on (e.g. reading .items off that error object). Never caught
+// by testing before now because buildPrinter() always threw first ("not
+// configured") whenever no real printer was reachable — this only surfaces
+// once a printer actually accepts the connection.
+function fetchJson(path, token) {
   return new Promise((resolve, reject) => {
+    const headers = token ? { 'X-Session-Token': token } : {};
     http
-      .get(`http://127.0.0.1:${currentApiPort}${path}`, (res) => {
+      .get(`http://127.0.0.1:${currentApiPort}${path}`, { headers }, (res) => {
         let data = '';
         res.on('data', (chunk) => {
           data += chunk;
         });
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data));
+            const parsed = JSON.parse(data);
+            if (res.statusCode >= 400) {
+              reject(new Error(parsed.message || `Request failed (${res.statusCode})`));
+              return;
+            }
+            resolve(parsed);
           } catch (err) {
             reject(err);
           }
@@ -376,9 +390,9 @@ function fetchJson(path) {
   });
 }
 
-ipcMain.handle('test-print', async () => {
+ipcMain.handle('test-print', async (event, token) => {
   try {
-    const settings = await fetchJson('/api/settings');
+    const settings = await fetchJson('/api/settings', token);
     return await printerModule.testPrint(settings);
   } catch (err) {
     logger.error(`test-print failed: ${err.message}`);
@@ -395,9 +409,9 @@ ipcMain.handle('list-usb-printers', async () => {
   }
 });
 
-ipcMain.handle('open-cash-drawer', async () => {
+ipcMain.handle('open-cash-drawer', async (event, token) => {
   try {
-    const settings = await fetchJson('/api/settings');
+    const settings = await fetchJson('/api/settings', token);
     return await printerModule.openCashDrawer(settings);
   } catch (err) {
     logger.error(`open-cash-drawer failed: ${err.message}`);
@@ -405,9 +419,12 @@ ipcMain.handle('open-cash-drawer', async () => {
   }
 });
 
-ipcMain.handle('print-receipt', async (event, orderId) => {
+ipcMain.handle('print-receipt', async (event, orderId, token) => {
   try {
-    const [order, settings] = await Promise.all([fetchJson(`/api/orders/${orderId}`), fetchJson('/api/settings')]);
+    const [order, settings] = await Promise.all([
+      fetchJson(`/api/orders/${orderId}`, token),
+      fetchJson('/api/settings', token),
+    ]);
     return await printerModule.printReceipt(settings, order);
   } catch (err) {
     logger.error(`print-receipt failed: ${err.message}`);
@@ -415,12 +432,12 @@ ipcMain.handle('print-receipt', async (event, orderId) => {
   }
 });
 
-ipcMain.handle('print-kot', async (event, orderId, itemIds) => {
+ipcMain.handle('print-kot', async (event, orderId, itemIds, token) => {
   try {
     const [order, settings, tables] = await Promise.all([
-      fetchJson(`/api/orders/${orderId}`),
-      fetchJson('/api/settings'),
-      fetchJson('/api/tables'),
+      fetchJson(`/api/orders/${orderId}`, token),
+      fetchJson('/api/settings', token),
+      fetchJson('/api/tables', token),
     ]);
     const table = tables.find((t) => t.id === order.table_id);
     return await printerModule.printKOT(settings, { ...order, table_label: table?.label }, itemIds);
