@@ -1,18 +1,98 @@
 const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const SCRIPTS_DIR = path.join(__dirname, 'scripts');
+
+function isUsb(settings) {
+  return settings.printer_connection === 'usb';
+}
+
+// USB thermal printers are just ordinary Windows-installed printers (the
+// vendor's own driver puts them there); we send raw ESC/POS bytes through
+// the Win32 print spooler via a small PowerShell/P-Invoke helper rather than
+// a node-gyp-built native module — no compiler toolchain needed on the
+// machine that builds the installer, and nothing that can go stale against a
+// particular Node/Electron ABI. See shell/scripts/print-raw.ps1.
+function runPowerShell(args) {
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', ...args], { windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    ps.stdout.on('data', (d) => { stdout += d; });
+    ps.stderr.on('data', (d) => { stderr += d; });
+    ps.on('error', reject);
+    ps.on('close', (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr.trim() || `PowerShell exited with code ${code}`));
+    });
+  });
+}
+
+async function listUsbPrinters() {
+  const scriptPath = path.join(SCRIPTS_DIR, 'list-printers.ps1');
+  const output = await runPowerShell(['-File', scriptPath]);
+  return output.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
+async function sendRawToUsbPrinter(printerName, buffer) {
+  const scriptPath = path.join(SCRIPTS_DIR, 'print-raw.ps1');
+  const tempFile = path.join(os.tmpdir(), `dineforge-print-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`);
+  fs.writeFileSync(tempFile, buffer);
+  try {
+    await runPowerShell(['-File', scriptPath, '-PrinterName', printerName, '-FilePath', tempFile]);
+  } finally {
+    fs.unlink(tempFile, () => {});
+  }
+}
 
 function buildPrinter(settings) {
-  const ip = settings.printer_ip;
-  if (!ip) {
-    throw new Error('Printer IP address is not configured (Admin → Settings → Printer)');
+  const config = {
+    type: settings.printer_type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
+    width: Number(settings.printer_width) || 42,
+  };
+
+  if (isUsb(settings)) {
+    if (!settings.printer_name) {
+      throw new Error('USB printer is not selected (Admin → Settings → Printer)');
+    }
+    // No `interface` set — this printer is only ever used to build a buffer
+    // (getBuffer()) which sendRawToUsbPrinter() delivers; execute() is never
+    // called on it, so it doesn't need node-thermal-printer's own interface.
+  } else {
+    const ip = settings.printer_ip;
+    if (!ip) {
+      throw new Error('Printer IP address is not configured (Admin → Settings → Printer)');
+    }
+    const port = settings.printer_port || '9100';
+    config.interface = `tcp://${ip}:${port}`;
+    config.options = { timeout: 4000 };
   }
 
-  const port = settings.printer_port || '9100';
-  return new ThermalPrinter({
-    type: settings.printer_type === 'star' ? PrinterTypes.STAR : PrinterTypes.EPSON,
-    interface: `tcp://${ip}:${port}`,
-    width: Number(settings.printer_width) || 42,
-    options: { timeout: 4000 },
-  });
+  return new ThermalPrinter(config);
+}
+
+async function isPrinterConnected(settings) {
+  if (isUsb(settings)) {
+    if (!settings.printer_name) return false;
+    const names = await listUsbPrinters();
+    return names.includes(settings.printer_name);
+  }
+  const printer = buildPrinter(settings);
+  return printer.isPrinterConnected();
+}
+
+// Delivers whatever's been built up in `printer`'s buffer — network prints
+// execute over the TCP interface node-thermal-printer already opened; USB
+// prints hand the raw bytes to the spooler helper instead.
+async function dispatch(settings, printer) {
+  if (isUsb(settings)) {
+    await sendRawToUsbPrinter(settings.printer_name, printer.getBuffer());
+  } else {
+    await printer.execute();
+  }
 }
 
 function money(cents, symbol) {
@@ -20,12 +100,12 @@ function money(cents, symbol) {
 }
 
 async function testPrint(settings) {
-  const printer = buildPrinter(settings);
-  const connected = await printer.isPrinterConnected();
+  const connected = await isPrinterConnected(settings);
   if (!connected) {
-    return { success: false, message: 'Printer not reachable at that address' };
+    return { success: false, message: isUsb(settings) ? 'Selected USB printer not found' : 'Printer not reachable at that address' };
   }
 
+  const printer = buildPrinter(settings);
   printer.alignCenter();
   printer.bold(true);
   printer.println(settings.restaurant_name || 'DineForge POS');
@@ -33,7 +113,7 @@ async function testPrint(settings) {
   printer.println('Test print OK');
   printer.println(new Date().toLocaleString());
   printer.cut();
-  await printer.execute();
+  await dispatch(settings, printer);
 
   return { success: true, message: 'Test print sent' };
 }
@@ -41,7 +121,7 @@ async function testPrint(settings) {
 async function openCashDrawer(settings) {
   const printer = buildPrinter(settings);
   printer.openCashDrawer();
-  await printer.execute();
+  await dispatch(settings, printer);
   return { success: true };
 }
 
@@ -93,7 +173,7 @@ async function printReceipt(settings, order) {
   printer.println('Thank you!');
   printer.cut();
 
-  await printer.execute();
+  await dispatch(settings, printer);
   return { success: true };
 }
 
@@ -135,8 +215,8 @@ async function printKOT(settings, order, itemIds) {
   printer.setTextNormal();
 
   printer.cut();
-  await printer.execute();
+  await dispatch(settings, printer);
   return { success: true };
 }
 
-module.exports = { testPrint, openCashDrawer, printReceipt, printKOT };
+module.exports = { testPrint, openCashDrawer, printReceipt, printKOT, listUsbPrinters };

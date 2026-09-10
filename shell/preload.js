@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('dineforge', {
     ipcRenderer.on('backend-restarted', () => callback());
   },
   testPrint: () => ipcRenderer.invoke('test-print'),
+  listUsbPrinters: () => ipcRenderer.invoke('list-usb-printers'),
   openCashDrawer: () => ipcRenderer.invoke('open-cash-drawer'),
   printReceipt: (orderId) => ipcRenderer.invoke('print-receipt', orderId),
   printKOT: (orderId, itemIds) => ipcRenderer.invoke('print-kot', orderId, itemIds),

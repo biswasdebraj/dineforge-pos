@@ -386,6 +386,15 @@ ipcMain.handle('test-print', async () => {
   }
 });
 
+ipcMain.handle('list-usb-printers', async () => {
+  try {
+    return await printerModule.listUsbPrinters();
+  } catch (err) {
+    logger.error(`list-usb-printers failed: ${err.message}`);
+    return [];
+  }
+});
+
 ipcMain.handle('open-cash-drawer', async () => {
   try {
     const settings = await fetchJson('/api/settings');

@@ -329,9 +329,19 @@ function renderSettings() {
     <div class="empty-hint">This rate applies automatically to every order's subtotal after discounts.</div>
 
     <div class="section-title">Receipt Printer</div>
-    <div class="form-row">
+    <div class="form-row" style="flex-direction:row;align-items:center;gap:1rem;">
+      <label style="margin:0;"><input type="radio" name="printerConnection" value="network" ${settings.printer_connection !== 'usb' ? 'checked' : ''} /> Network</label>
+      <label style="margin:0;"><input type="radio" name="printerConnection" value="usb" ${settings.printer_connection === 'usb' ? 'checked' : ''} /> USB</label>
+    </div>
+    <div class="form-row" id="printerNetworkRow">
       <input id="printerIp" type="text" value="${escapeHtml(settings.printer_ip || '')}" placeholder="Printer IP address" style="width:160px" />
       <input id="printerPort" type="text" value="${escapeHtml(settings.printer_port || '9100')}" placeholder="Port" style="width:80px" />
+    </div>
+    <div class="form-row" id="printerUsbRow" hidden>
+      <select id="printerName" style="min-width:220px;"><option value="">Loading…</option></select>
+      <button class="btn" id="refreshPrintersBtn" type="button">Refresh</button>
+    </div>
+    <div class="form-row">
       <select id="printerType">
         <option value="epson" ${settings.printer_type !== 'star' ? 'selected' : ''}>Epson-compatible</option>
         <option value="star" ${settings.printer_type === 'star' ? 'selected' : ''}>Star</option>
@@ -342,7 +352,7 @@ function renderSettings() {
       <button class="btn" id="testPrintBtn">Test Print</button>
       <button class="btn" id="openDrawerBtn">Open Cash Drawer</button>
     </div>
-    <div class="empty-hint">Network (Ethernet/Wi-Fi) ESC/POS printers only, e.g. 192.168.1.50. USB/serial printers aren't supported yet. Only available in the desktop app, not a browser tab.</div>
+    <div class="empty-hint">Network (Ethernet/Wi-Fi) ESC/POS printers, e.g. 192.168.1.50, or a USB thermal printer already installed in Windows. Only available in the desktop app, not a browser tab.</div>
 
     <div class="section-title">Backups</div>
     <div class="form-row">
@@ -431,11 +441,42 @@ function renderSettings() {
     });
   });
 
+  const printerNetworkRow = panel.querySelector('#printerNetworkRow');
+  const printerUsbRow = panel.querySelector('#printerUsbRow');
+  const printerNameSelect = panel.querySelector('#printerName');
+
+  function updatePrinterConnectionRows() {
+    const usb = panel.querySelector('input[name="printerConnection"]:checked').value === 'usb';
+    printerNetworkRow.hidden = usb;
+    printerUsbRow.hidden = !usb;
+  }
+  panel.querySelectorAll('input[name="printerConnection"]').forEach((radio) => {
+    radio.addEventListener('change', updatePrinterConnectionRows);
+  });
+  updatePrinterConnectionRows();
+
+  async function refreshUsbPrinters() {
+    if (!window.dineforge?.listUsbPrinters) {
+      printerNameSelect.innerHTML = '<option value="">Only available in the desktop app</option>';
+      return;
+    }
+    printerNameSelect.innerHTML = '<option value="">Loading…</option>';
+    const names = await window.dineforge.listUsbPrinters();
+    const current = settings.printer_name || '';
+    printerNameSelect.innerHTML = names.length
+      ? names.map((n) => `<option value="${escapeHtml(n)}" ${n === current ? 'selected' : ''}>${escapeHtml(n)}</option>`).join('')
+      : '<option value="">No printers found</option>';
+  }
+  panel.querySelector('#refreshPrintersBtn').addEventListener('click', refreshUsbPrinters);
+  refreshUsbPrinters();
+
   panel.querySelector('#savePrinterBtn').addEventListener('click', async () => {
     try {
       await api.settings.update({
+        printer_connection: panel.querySelector('input[name="printerConnection"]:checked').value,
         printer_ip: panel.querySelector('#printerIp').value.trim(),
         printer_port: panel.querySelector('#printerPort').value.trim() || '9100',
+        printer_name: printerNameSelect.value,
         printer_type: panel.querySelector('#printerType').value,
       });
       await refresh();

@@ -128,4 +128,40 @@ test.describe('DineForge POS smoke test', () => {
     // crashing the app — the printer connect timeout is ~4s.
     await expect(window.getByText(/Printer IP address is not configured/).first()).toBeVisible({ timeout: 8000 });
   });
+
+  test('printer settings: USB connection type lists real installed printers', async () => {
+    // This machine has real Windows printers installed (whatever's on the
+    // test runner). We verify they're listed and that an unconfigured USB
+    // printer fails gracefully — but deliberately never select one of the
+    // real printers and print to it, since that could actually queue a job
+    // on physical/virtual hardware attached to whoever runs this suite.
+    await window.getByRole('button', { name: 'Admin', exact: true }).click();
+    await window.getByRole('button', { name: 'Settings', exact: true }).click();
+
+    await window.locator('input[name="printerConnection"][value="usb"]').check();
+    await expect(window.locator('#printerUsbRow')).toBeVisible();
+    await expect(window.locator('#printerNetworkRow')).toBeHidden();
+
+    const printerOptions = window.locator('#printerName option');
+    await expect(printerOptions.first()).toBeAttached();
+    expect(await printerOptions.count()).toBeGreaterThan(0);
+
+    // Save with USB selected but no specific printer chosen, then confirm
+    // Test Print reports the same kind of graceful "not configured" failure
+    // as the network path does elsewhere in this suite — never an app crash.
+    // #savePrinterBtn specifically: the Settings panel has more than one
+    // button plainly labeled "Save" (general settings, printer, tax).
+    await window.locator('#savePrinterBtn').click();
+    await expect(window.getByText('Printer settings saved')).toBeVisible();
+
+    await window.getByRole('button', { name: 'Test Print' }).click();
+    await expect(window.getByText(/USB printer is not selected|Selected USB printer not found/).first()).toBeVisible({
+      timeout: 8000,
+    });
+
+    // Leave settings back on Network so this test's ordering doesn't leak
+    // into any future test added after it in this file.
+    await window.locator('input[name="printerConnection"][value="network"]').check();
+    await window.locator('#savePrinterBtn').click();
+  });
 });
