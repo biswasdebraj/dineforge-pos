@@ -8,7 +8,8 @@
     "start": "electron .",
     "test:e2e": "playwright test",
     "predist": "node -e \"if(!require('fs').existsSync('resources/php/php.exe')){console.error('PHP runtime not found. Run: powershell -ExecutionPolicy Bypass -File scripts/fetch-php.ps1');process.exit(1);}\"",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "release": "electron-builder --win --publish always"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -16,6 +17,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "node-thermal-printer": "^4.6.1",
     "qrcode": "^1.5.4"
   },
@@ -63,6 +65,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "biswasdebraj",
+      "repo": "dineforge-pos"
     }
   }
 }

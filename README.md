@@ -75,9 +75,23 @@ npm run dist
 
 Output lands in `dist/`.
 
+### Publishing a release (auto-update)
+
+Installed copies check `github.com/biswasdebraj/dineforge-pos/releases` for updates on launch (via [electron-updater](https://www.electron.build/auto-update)), download in the background, and prompt to restart once ready — or apply automatically the next time the app quits. This is inert until a release actually exists: a missing release is treated as "no update available," never as an error surfaced to whoever's running the till.
+
+To cut one, generate a [GitHub personal access token](https://github.com/settings/tokens) with `repo` scope and:
+
+```bash
+cd shell
+powershell -ExecutionPolicy Bypass -File scripts/fetch-php.ps1
+$env:GH_TOKEN = "<token>"
+npm version <patch|minor|major>   # bumps shell/package.json
+npm run release                    # builds the installer and publishes it as a GitHub Release
+```
+
 ## Status
 
-Core roadmap (data model, API, hardware integration, security, packaging, first-run wizard) is complete. Role-based auth, LAN device access, and theming have landed since. KOT (kitchen ticket) printing, USB thermal printer support, and seamless auto-updates are in progress.
+Core roadmap (data model, API, hardware integration, security, packaging, first-run wizard) is complete. Role-based auth, LAN device access, theming, and the public repo + auto-update plumbing above have landed since. KOT (kitchen ticket) printing and USB thermal printer support are in progress.
 
 ## License
 

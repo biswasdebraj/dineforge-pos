@@ -5,6 +5,7 @@ const http = require('http');
 const os = require('os');
 const { spawn } = require('child_process');
 const QRCode = require('qrcode');
+const { autoUpdater } = require('electron-updater');
 const logger = require('./logger');
 const printerModule = require('./printer');
 
@@ -160,12 +161,95 @@ async function restartBackend() {
   }
 }
 
+// Update plumbing: checks GitHub Releases on biswasdebraj/dineforge-pos (see
+// the "publish" block in package.json). This only works once a release with
+// installer + latest.yml has actually been published there (`npm run
+// release`, with GH_TOKEN set) — until then, checkForUpdates() just resolves
+// with "no update available" or a harmless 404, never installed silently.
+let manualUpdateCheck = false;
+
+function setupAutoUpdater() {
+  autoUpdater.logger = {
+    info: (msg) => logger.info(`[updater] ${msg}`),
+    warn: (msg) => logger.warn(`[updater] ${msg}`),
+    error: (msg) => logger.error(`[updater] ${msg}`),
+    debug: () => {},
+  };
+  // Install automatically on quit even if the user dismisses the "restart
+  // now" prompt below — a POS terminal that's rarely explicitly restarted
+  // should still end up current the next time it's closed.
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-not-available', () => {
+    if (manualUpdateCheck) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'DineForge POS',
+        message: "You're up to date.",
+      });
+    }
+    manualUpdateCheck = false;
+  });
+
+  autoUpdater.on('error', (err) => {
+    logger.warn(`Update check failed: ${err.message}`);
+    // A background check finding no releases yet (404) is expected right now
+    // and shouldn't alarm anyone at a live terminal — only surface errors
+    // when someone explicitly asked via "Check for Updates...".
+    if (manualUpdateCheck) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'DineForge POS',
+        message: 'Could not check for updates.',
+        detail: err.message,
+      });
+    }
+    manualUpdateCheck = false;
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    manualUpdateCheck = false;
+    dialog
+      .showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update ready',
+        message: `DineForge POS ${info.version} has been downloaded.`,
+        detail: 'Restart now to install it, or it will install automatically the next time you quit.',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+      })
+      .then(({ response }) => {
+        if (response === 0) {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        }
+      });
+  });
+}
+
+function checkForUpdates(manual = false) {
+  if (!app.isPackaged) {
+    if (manual) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'DineForge POS',
+        message: 'Updates are only available in the installed app, not in development.',
+      });
+    }
+    return;
+  }
+  manualUpdateCheck = manual;
+  autoUpdater.checkForUpdates().catch((err) => logger.warn(`checkForUpdates failed: ${err.message}`));
+}
+
 function buildAppMenu() {
   return Menu.buildFromTemplate([
     {
       label: 'File',
       submenu: [
         { label: 'Restart Backend', click: () => restartBackend().catch((e) => logger.error(e.message)) },
+        { label: 'Check for Updates...', click: () => checkForUpdates(true) },
         { label: 'Open Logs Folder', click: () => shell.openPath(logger.getLogDir()) },
         { type: 'separator' },
         {
@@ -200,6 +284,7 @@ function createTray() {
       },
       { type: 'separator' },
       { label: 'Restart Backend', click: () => restartBackend().catch((e) => logger.error(e.message)) },
+      { label: 'Check for Updates...', click: () => checkForUpdates(true) },
       { label: 'Open Logs Folder', click: () => shell.openPath(logger.getLogDir()) },
       { type: 'separator' },
       {
@@ -336,11 +421,14 @@ if (!gotLock) {
   app.whenReady().then(() => {
     Menu.setApplicationMenu(buildAppMenu());
     tray = createTray();
-    createWindow().catch((err) => {
-      logger.error(`Failed to start app: ${err.message}`);
-      dialog.showErrorBox('DineForge POS — Startup Error', err.message);
-      app.quit();
-    });
+    setupAutoUpdater();
+    createWindow()
+      .then(() => checkForUpdates(false))
+      .catch((err) => {
+        logger.error(`Failed to start app: ${err.message}`);
+        dialog.showErrorBox('DineForge POS — Startup Error', err.message);
+        app.quit();
+      });
   });
 
   app.on('before-quit', () => {
