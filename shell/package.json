@@ -46,7 +46,8 @@
         "filter": [
           "**/*",
           "!data/*.sqlite*",
-          "!vendor/**",
+          "!vendor/bin/**",
+          "!vendor/phpunit/**",
           "!tests/**",
           "!.phpunit.cache/**"
         ]

@@ -30,25 +30,32 @@ Write-Output "Extracting to $phpDir"
 Expand-Archive -Path $zipPath -DestinationPath $phpDir -Force
 Remove-Item $zipPath
 
-# Only pdo_sqlite/sqlite3 are needed — this app never loads any other
-# extension, and dev/ (build headers) is never needed at runtime.
+# pdo_sqlite/sqlite3 for the database; mbstring/zip for PhpSpreadsheet
+# (menu Excel import/template — the Xlsx reader needs ZipArchive from the
+# zip extension, and PhpSpreadsheet's shared string handling needs
+# mbstring). Nothing else is needed, and dev/ (build headers) never is.
+$neededExtensions = @('php_pdo_sqlite.dll', 'php_sqlite3.dll', 'php_mbstring.dll', 'php_zip.dll')
 Remove-Item -Recurse -Force (Join-Path $phpDir 'dev') -ErrorAction SilentlyContinue
 $extDir = Join-Path $phpDir 'ext'
 Get-ChildItem $extDir -Filter '*.dll' | Where-Object {
-    $_.Name -ne 'php_pdo_sqlite.dll' -and $_.Name -ne 'php_sqlite3.dll'
+    $neededExtensions -notcontains $_.Name
 } | Remove-Item -Force
 
 # Portable builds ship without an active php.ini — base ours on the
-# production template with just the two needed extensions enabled.
+# production template with just the needed extensions enabled.
 $iniContent = Get-Content (Join-Path $phpDir 'php.ini-production') -Raw
 $iniContent = $iniContent -replace '(?m)^;extension_dir = "ext"', 'extension_dir = "ext"'
 $iniContent = $iniContent -replace '(?m)^;extension=pdo_sqlite', 'extension=pdo_sqlite'
 $iniContent = $iniContent -replace '(?m)^;extension=sqlite3', 'extension=sqlite3'
+$iniContent = $iniContent -replace '(?m)^;extension=mbstring', 'extension=mbstring'
+$iniContent = $iniContent -replace '(?m)^;extension=zip', 'extension=zip'
 Set-Content -Path (Join-Path $phpDir 'php.ini') -Value $iniContent -Encoding utf8 -NoNewline
 
 $loaded = & (Join-Path $phpDir 'php.exe') -c (Join-Path $phpDir 'php.ini') -m
-if ($loaded -notcontains 'pdo_sqlite' -or $loaded -notcontains 'sqlite3') {
-    throw 'pdo_sqlite/sqlite3 did not load correctly after setup'
+foreach ($required in @('pdo_sqlite', 'sqlite3', 'mbstring', 'zip')) {
+    if ($loaded -notcontains $required) {
+        throw "$required did not load correctly after setup"
+    }
 }
 
-Write-Output "PHP $phpVersion staged at $phpDir with pdo_sqlite/sqlite3 enabled."
+Write-Output "PHP $phpVersion staged at $phpDir with pdo_sqlite/sqlite3/mbstring/zip enabled."

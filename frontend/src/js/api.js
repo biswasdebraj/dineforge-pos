@@ -80,6 +80,37 @@ export function clearSession() {
   }
 }
 
+// For plain <a href> downloads (template file) and file uploads (menu
+// import), which can't go through apiFetch — one needs no JSON body and
+// no auth header at all, the other needs a multipart body apiFetch's fixed
+// Content-Type: application/json would corrupt.
+export async function apiUrl(path) {
+  return `${await getApiBase()}${path}`;
+}
+
+export async function uploadFile(path, file) {
+  const base = await getApiBase();
+  const session = getSession();
+  const headers = {};
+  if (session) {
+    headers['X-Session-Token'] = session.token;
+  }
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${base}${path}`, { method: 'POST', headers, body: form });
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (_) {
+    data = null;
+  }
+  if (!res.ok) {
+    throw new Error((data && data.message) || `Request failed (${res.status})`);
+  }
+  return data;
+}
+
 async function apiFetch(path, options = {}) {
   const base = await getApiBase();
   const session = getSession();
@@ -175,6 +206,7 @@ export const api = {
   reports: {
     dailySales: (date) => apiFetch(`/api/reports/daily-sales${qs({ date })}`),
   },
+  menuImport: (file) => uploadFile('/api/menu/import', file),
 };
 
 export function money(cents, symbol = '$') {

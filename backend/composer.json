@@ -11,5 +11,8 @@
         "classmap": [
             "tests/"
         ]
+    },
+    "require": {
+        "phpoffice/phpspreadsheet": "^5.9"
     }
 }

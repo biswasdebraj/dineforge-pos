@@ -1,4 +1,4 @@
-import { api, toast, escapeHtml, CURRENCIES, money, showModal, closeModal } from './api.js';
+import { api, toast, escapeHtml, CURRENCIES, money, showModal, closeModal, apiUrl } from './api.js';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -90,6 +90,16 @@ export async function refresh() {
 function renderMenu() {
   const panel = root.querySelector('#admin-menu');
   panel.innerHTML = `
+    <div class="section-title">Import Menu from Excel</div>
+    <div class="form-row">
+      <a href="#" id="downloadTemplateLink">Download template (.xlsx)</a>
+    </div>
+    <div class="form-row">
+      <input id="menuImportFile" type="file" accept=".xlsx" />
+      <button class="btn primary" id="menuImportBtn">Import</button>
+    </div>
+    <div class="empty-hint">Columns: Category, Item Name, Price, Description (optional), SKU (optional). Re-importing updates items already matching by category + name instead of duplicating them.</div>
+
     <div class="section-title">Categories</div>
     <table class="data-table">
       <thead><tr><th>Name</th><th>Sort</th><th>Active</th><th></th></tr></thead>
@@ -172,6 +182,38 @@ function renderMenu() {
       })
     );
     row.querySelector('.item-delete')?.addEventListener('click', () => deleteItem(id));
+  });
+
+  panel.querySelector('#downloadTemplateLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const url = await apiUrl('/api/menu/template');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'dineforge-menu-template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+
+  panel.querySelector('#menuImportBtn').addEventListener('click', async () => {
+    const fileInput = panel.querySelector('#menuImportFile');
+    const file = fileInput.files[0];
+    if (!file) {
+      toast('Choose a file first', true);
+      return;
+    }
+    try {
+      const result = await api.menuImport(file);
+      await refresh();
+      const parts = [`${result.created} created`, `${result.updated} updated`];
+      if (result.errors.length) parts.push(`${result.errors.length} row(s) skipped`);
+      toast(parts.join(', '), result.errors.length > 0);
+      if (result.errors.length) {
+        console.warn('Menu import errors:', result.errors);
+      }
+    } catch (err) {
+      toast(err.message, true);
+    }
   });
 
   panel.querySelector('#newCatBtn').addEventListener('click', async () => {

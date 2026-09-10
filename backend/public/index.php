@@ -14,7 +14,9 @@ if (!str_starts_with($requestUri, '/api/')) {
     serve_static_frontend($requestUri);
     exit;
 }
+require_once __DIR__ . '/../vendor/autoload.php'; // PhpSpreadsheet (menu import/template) needs Composer's PSR-4 autoloader — our own hand-rolled classes below don't.
 require_once __DIR__ . '/../src/services/MenuService.php';
+require_once __DIR__ . '/../src/services/MenuImportService.php';
 require_once __DIR__ . '/../src/services/ShiftService.php';
 require_once __DIR__ . '/../src/services/OrderService.php';
 require_once __DIR__ . '/../src/services/SettingsService.php';
@@ -24,6 +26,7 @@ require_once __DIR__ . '/../src/services/ReportService.php';
 
 $pdo = get_db_connection();
 $menuService = new MenuService($pdo);
+$menuImportService = new MenuImportService($menuService);
 $shiftService = new ShiftService($pdo);
 $orderService = new OrderService($pdo);
 $settingsService = new SettingsService($pdo);
@@ -112,6 +115,28 @@ $router->put('/api/menu/items/{id}', guarded($authService, ['admin'], function (
 $router->delete('/api/menu/items/{id}', guarded($authService, ['admin'], function (array $p) use ($menuService) {
     $menuService->deleteItem((int) $p['id']);
     json_response(['status' => 'ok']);
+}));
+
+// Public — it's a blank template with no restaurant data, and a plain link
+// navigation (needed for the browser's normal download handling) can't
+// attach the X-Session-Token header an admin-guarded route would require.
+$router->get('/api/menu/template', function () use ($menuImportService) {
+    $contents = $menuImportService->generateTemplate();
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="dineforge-menu-template.xlsx"');
+    header('Content-Length: ' . strlen($contents));
+    echo $contents;
+    exit;
+});
+$router->post('/api/menu/import', guarded($authService, ['admin'], function () use ($menuImportService) {
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+        json_error('No file uploaded', 400);
+    }
+    try {
+        json_response($menuImportService->import($_FILES['file']['tmp_name']));
+    } catch (Throwable $e) {
+        json_error('Could not read that file: ' . $e->getMessage(), 422);
+    }
 }));
 
 // Dining tables
