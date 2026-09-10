@@ -16,7 +16,11 @@ export async function init(root, ctx) {
   apiBase = await apiUrl('');
 
   root.innerHTML = `
-    <div class="pos-layout">
+    <div class="pos-layout" id="posLayout">
+      <div class="mobile-panel-toggle">
+        <button class="mobile-toggle-btn active" id="mobileShowMenu" type="button">Menu</button>
+        <button class="mobile-toggle-btn" id="mobileShowCart" type="button">Cart</button>
+      </div>
       <div class="menu-panel">
         <div class="category-tabs" id="categoryTabs"></div>
         <div class="item-grid" id="itemGrid"></div>
@@ -56,6 +60,9 @@ export async function init(root, ctx) {
   `;
 
   els = {
+    posLayout: root.querySelector('#posLayout'),
+    mobileShowMenu: root.querySelector('#mobileShowMenu'),
+    mobileShowCart: root.querySelector('#mobileShowCart'),
     categoryTabs: root.querySelector('#categoryTabs'),
     itemGrid: root.querySelector('#itemGrid'),
     orderPicker: root.querySelector('#orderPicker'),
@@ -76,6 +83,8 @@ export async function init(root, ctx) {
     voidOrderBtn: root.querySelector('#voidOrderBtn'),
   };
 
+  els.mobileShowMenu.addEventListener('click', () => showMobilePanel('menu'));
+  els.mobileShowCart.addEventListener('click', () => showMobilePanel('cart'));
   els.newOrderBtn.addEventListener('click', onNewOrder);
   els.editCustomerBtn.addEventListener('click', onEditCustomerName);
   els.orderPicker.addEventListener('change', onPickOrder);
@@ -203,6 +212,16 @@ function renderCategoryTabs() {
       renderItemGrid();
     });
   });
+}
+
+// No-op on desktop widths (the toggle is hidden via CSS and both panels
+// show side by side regardless of this class) — only matters under the
+// mobile breakpoint, where .menu-panel/.cart-panel visibility is driven
+// entirely by whether .pos-layout has this class.
+function showMobilePanel(which) {
+  els.posLayout.classList.toggle('show-cart', which === 'cart');
+  els.mobileShowMenu.classList.toggle('active', which === 'menu');
+  els.mobileShowCart.classList.toggle('active', which === 'cart');
 }
 
 function renderItemGrid() {
@@ -343,6 +362,9 @@ async function onPickOrder() {
 }
 
 function renderCart() {
+  const itemCount = currentOrder ? currentOrder.items.filter((i) => i.status !== 'void').reduce((n, i) => n + i.quantity, 0) : 0;
+  els.mobileShowCart.textContent = itemCount ? `Cart (${itemCount})` : 'Cart';
+
   if (!currentOrder) {
     els.orderLabel.textContent = 'No order selected';
     els.orderLabel.classList.add('empty-hint');
