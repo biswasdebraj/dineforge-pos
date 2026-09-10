@@ -19,6 +19,15 @@ final class OrderServiceTest extends TestCase
         $this->pdo->exec("UPDATE taxes SET rate_percent = {$percent} WHERE is_default = 1");
     }
 
+    private function setSetting(string $key, string $value): void
+    {
+        $stmt = $this->pdo->prepare(
+            "INSERT INTO settings (key, value) VALUES (:key, :value)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+        );
+        $stmt->execute(['key' => $key, 'value' => $value]);
+    }
+
     public function testCreateOrderGeneratesSequentialOrderNumber(): void
     {
         $a = $this->orders->create([]);
@@ -54,6 +63,78 @@ final class OrderServiceTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->orders->create(['order_type' => 'bogus']);
+    }
+
+    public function testDeliveryOrderGetsDefaultDeliveryAndPackagingFee(): void
+    {
+        $this->setSetting('delivery_fee_default_cents', '150');
+        $this->setSetting('packaging_fee_default_cents', '50');
+
+        $order = $this->orders->create(['order_type' => 'delivery']);
+
+        $this->assertSame(150, $order['delivery_fee_cents']);
+        $this->assertSame(50, $order['packaging_fee_cents']);
+    }
+
+    public function testTakeawayOrderGetsPackagingFeeOnlyNotDelivery(): void
+    {
+        $this->setSetting('delivery_fee_default_cents', '150');
+        $this->setSetting('packaging_fee_default_cents', '50');
+
+        $order = $this->orders->create(['order_type' => 'takeaway']);
+
+        $this->assertSame(0, $order['delivery_fee_cents']);
+        $this->assertSame(50, $order['packaging_fee_cents']);
+    }
+
+    public function testDineInOrderGetsNoCharges(): void
+    {
+        $this->setSetting('delivery_fee_default_cents', '150');
+        $this->setSetting('packaging_fee_default_cents', '50');
+
+        $order = $this->orders->create(['order_type' => 'dine_in']);
+
+        $this->assertSame(0, $order['delivery_fee_cents']);
+        $this->assertSame(0, $order['packaging_fee_cents']);
+    }
+
+    public function testChargesAreIncludedInTaxableTotal(): void
+    {
+        $this->setTaxRate(10);
+        $cat = $this->makeCategory($this->menu);
+        $item = $this->makeItem($this->menu, (int) $cat['id'], 'Burger', 1000);
+
+        $order = $this->orders->create(['order_type' => 'delivery']);
+        $order = $this->orders->updateCharges((int) $order['id'], 200, 100);
+        $order = $this->orders->addItem((int) $order['id'], ['menu_item_id' => $item['id'], 'quantity' => 1]);
+
+        // subtotal 1000 + delivery 200 + packaging 100 = 1300 taxable, 10% tax = 130
+        $this->assertSame(1000, $order['subtotal_cents']);
+        $this->assertSame(130, $order['tax_total_cents']);
+        $this->assertSame(1430, $order['total_cents']);
+    }
+
+    public function testUpdateChargesPartiallyOverrides(): void
+    {
+        $order = $this->orders->create(['order_type' => 'delivery']);
+        $updated = $this->orders->updateCharges((int) $order['id'], 300, null);
+
+        $this->assertSame(300, $updated['delivery_fee_cents']);
+        $this->assertSame($order['packaging_fee_cents'], $updated['packaging_fee_cents']);
+    }
+
+    public function testCompositeSchemeChargesNoTax(): void
+    {
+        $this->setTaxRate(10);
+        $this->setSetting('gst_scheme', 'composite');
+        $cat = $this->makeCategory($this->menu);
+        $item = $this->makeItem($this->menu, (int) $cat['id'], 'Burger', 1000);
+
+        $order = $this->orders->create([]);
+        $order = $this->orders->addItem((int) $order['id'], ['menu_item_id' => $item['id'], 'quantity' => 1]);
+
+        $this->assertSame(0, $order['tax_total_cents']);
+        $this->assertSame(1000, $order['total_cents']);
     }
 
     public function testAddItemComputesSubtotal(): void

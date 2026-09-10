@@ -87,7 +87,7 @@ async function boot() {
     settings = {};
   }
 
-  const ctx = { currencySymbol: settings.currency_symbol || '$' };
+  const ctx = { currencySymbol: settings.currency_symbol || '$', gstScheme: settings.gst_scheme || 'regular' };
 
   if (allowedTabs.includes('pos') || allowedTabs.includes('kitchen')) {
     await refreshShiftStatus();

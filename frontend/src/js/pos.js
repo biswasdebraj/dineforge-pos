@@ -6,10 +6,12 @@ let tables = [];
 let activeCategoryId = null;
 let currentOrder = null;
 let currencySymbol = '$';
+let gstScheme = 'regular';
 let els = {};
 
 export async function init(root, ctx) {
   currencySymbol = ctx.currencySymbol;
+  gstScheme = ctx.gstScheme;
 
   root.innerHTML = `
     <div class="pos-layout">
@@ -284,6 +286,44 @@ function onEditCustomerName() {
   );
 }
 
+function onEditCharges() {
+  if (!currentOrder) return;
+  showModal(
+    `
+    <h2>Delivery &amp; Packaging</h2>
+    <div class="form-row">
+      <label>Delivery Fee</label>
+      <input id="deliveryFeeInput" type="number" min="0" step="0.01" value="${(currentOrder.delivery_fee_cents / 100).toFixed(2)}" />
+    </div>
+    <div class="form-row">
+      <label>Packaging Fee</label>
+      <input id="packagingFeeInput" type="number" min="0" step="0.01" value="${(currentOrder.packaging_fee_cents / 100).toFixed(2)}" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="chargesCancel">Cancel</button>
+      <button class="btn primary" id="chargesSave">Save</button>
+    </div>
+  `,
+    (modal) => {
+      modal.querySelector('#chargesCancel').addEventListener('click', closeModal);
+      modal.querySelector('#chargesSave').addEventListener('click', async () => {
+        try {
+          const deliveryFeeCents = Math.round(parseFloat(modal.querySelector('#deliveryFeeInput').value || '0') * 100);
+          const packagingFeeCents = Math.round(parseFloat(modal.querySelector('#packagingFeeInput').value || '0') * 100);
+          currentOrder = await api.orders.updateCharges(currentOrder.id, {
+            delivery_fee_cents: deliveryFeeCents,
+            packaging_fee_cents: packagingFeeCents,
+          });
+          closeModal();
+          renderCart();
+        } catch (err) {
+          toast(err.message, true);
+        }
+      });
+    }
+  );
+}
+
 async function onPickOrder() {
   const id = els.orderPicker.value;
   if (!id) {
@@ -361,12 +401,41 @@ function renderCart() {
     ? `<div class="row"><span>Discount</span><span>-${money(currentOrder.discount_total_cents, currencySymbol)}</span></div>`
     : '';
 
+  const chargesEditable = editable && currentOrder.order_type !== 'dine_in';
+  const chargesLine = currentOrder.order_type === 'dine_in'
+    ? ''
+    : `<div class="row">
+        <span>Delivery Fee${chargesEditable ? ' <a href="#" id="editChargesLink">edit</a>' : ''}</span>
+        <span>${money(currentOrder.delivery_fee_cents, currencySymbol)}</span>
+      </div>
+      <div class="row"><span>Packaging Fee</span><span>${money(currentOrder.packaging_fee_cents, currencySymbol)}</span></div>`;
+
+  let taxLines;
+  if (gstScheme === 'composite') {
+    taxLines = '<div class="empty-hint">Composition scheme — tax included in price, not itemized.</div>';
+  } else {
+    const cgst = Math.round(currentOrder.tax_total_cents / 2);
+    const sgst = currentOrder.tax_total_cents - cgst;
+    taxLines = `
+      <div class="row"><span>CGST</span><span>${money(cgst, currencySymbol)}</span></div>
+      <div class="row"><span>SGST</span><span>${money(sgst, currencySymbol)}</span></div>
+    `;
+  }
+
   els.cartTotals.innerHTML = `
     <div class="row"><span>Subtotal</span><span>${money(currentOrder.subtotal_cents, currencySymbol)}</span></div>
     ${discountLine}
-    <div class="row"><span>Tax</span><span>${money(currentOrder.tax_total_cents, currencySymbol)}</span></div>
+    ${chargesLine}
+    ${taxLines}
     <div class="row total"><span>Total</span><span>${money(currentOrder.total_cents, currencySymbol)}</span></div>
   `;
+
+  if (chargesEditable) {
+    els.cartTotals.querySelector('#editChargesLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      onEditCharges();
+    });
+  }
 
   setActionsEnabled(editable, currentOrder);
 }

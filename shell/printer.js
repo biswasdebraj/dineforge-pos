@@ -129,12 +129,20 @@ async function printReceipt(settings, order) {
   const printer = buildPrinter(settings);
   const symbol = settings.currency_symbol || '$';
 
+  const isComposite = settings.gst_scheme === 'composite';
+
   printer.alignCenter();
   printer.bold(true);
   printer.setTextDoubleHeight();
   printer.println(settings.restaurant_name || 'DineForge POS');
   printer.setTextNormal();
   printer.bold(false);
+  if (settings.restaurant_address) {
+    printer.println(settings.restaurant_address);
+  }
+  if (settings.gstin) {
+    printer.println(`GSTIN: ${settings.gstin}`);
+  }
   printer.println(`Order #${order.order_number}`);
   if (order.customer_name) {
     printer.println(`Customer: ${order.customer_name}`);
@@ -156,7 +164,29 @@ async function printReceipt(settings, order) {
   if (order.discount_total_cents) {
     printer.leftRight('Discount', `-${money(order.discount_total_cents, symbol)}`);
   }
-  printer.leftRight('Tax', money(order.tax_total_cents, symbol));
+  if (order.delivery_fee_cents) {
+    printer.leftRight('Delivery Fee', money(order.delivery_fee_cents, symbol));
+  }
+  if (order.packaging_fee_cents) {
+    printer.leftRight('Packaging Fee', money(order.packaging_fee_cents, symbol));
+  }
+  if (isComposite) {
+    // Composition-scheme dealers cannot charge tax separately to the
+    // customer — item prices are already tax-inclusive, so no tax line, and
+    // the law requires this exact disclaimer on the invoice instead.
+    printer.setTextNormal();
+    printer.println('Composition taxable person,');
+    printer.println('not eligible to collect tax');
+    printer.println('on supplies.');
+  } else if (order.tax_total_cents) {
+    // Split evenly rather than recomputing from a rate — always sums back
+    // to the stored total exactly, even when the tax is an odd number of
+    // paisa/cents.
+    const cgst = Math.round(order.tax_total_cents / 2);
+    const sgst = order.tax_total_cents - cgst;
+    printer.leftRight(`CGST`, money(cgst, symbol));
+    printer.leftRight(`SGST`, money(sgst, symbol));
+  }
   printer.bold(true);
   printer.leftRight('Total', money(order.total_cents, symbol));
   printer.bold(false);

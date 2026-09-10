@@ -47,6 +47,8 @@ test.describe('DineForge POS smoke test', () => {
     await window.locator('#wName').fill('E2E Restaurant');
     await window.getByRole('button', { name: 'Next' }).click();
 
+    await window.getByRole('button', { name: 'Next' }).click(); // business details step, defaults fine
+
     await window.getByRole('button', { name: 'Next' }).click(); // tax step, defaults fine
 
     await window.getByRole('button', { name: 'Next' }).click(); // optional step, skip

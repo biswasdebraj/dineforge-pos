@@ -18,6 +18,21 @@ async function getApiBase() {
   return 'http://127.0.0.1:8899';
 }
 
+export const CURRENCIES = [
+  { code: 'USD', symbol: '$', label: 'US Dollar ($)' },
+  { code: 'EUR', symbol: '€', label: 'Euro (€)' },
+  { code: 'GBP', symbol: '£', label: 'British Pound (£)' },
+  { code: 'INR', symbol: '₹', label: 'Indian Rupee (₹)' },
+  { code: 'AUD', symbol: '$', label: 'Australian Dollar ($)' },
+  { code: 'CAD', symbol: '$', label: 'Canadian Dollar ($)' },
+  { code: 'JPY', symbol: '¥', label: 'Japanese Yen (¥)' },
+  { code: 'CNY', symbol: '¥', label: 'Chinese Yuan (¥)' },
+  { code: 'AED', symbol: 'د.إ', label: 'UAE Dirham (د.إ)' },
+  { code: 'SGD', symbol: '$', label: 'Singapore Dollar ($)' },
+  { code: 'ZAR', symbol: 'R', label: 'South African Rand (R)' },
+  { code: 'NZD', symbol: '$', label: 'New Zealand Dollar ($)' },
+];
+
 function qs(params) {
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -152,6 +167,7 @@ export const api = {
     send: (id) => apiFetch(`/api/orders/${id}/send`, { method: 'POST' }),
     updateCustomer: (id, customerName) =>
       apiFetch(`/api/orders/${id}/customer`, { method: 'PUT', body: JSON.stringify({ customer_name: customerName }) }),
+    updateCharges: (id, body) => apiFetch(`/api/orders/${id}/charges`, { method: 'PUT', body: JSON.stringify(body) }),
     void: (id) => apiFetch(`/api/orders/${id}/void`, { method: 'POST' }),
     pay: (id, body) => apiFetch(`/api/orders/${id}/payments`, { method: 'POST', body: JSON.stringify(body) }),
   },

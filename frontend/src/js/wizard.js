@@ -1,6 +1,6 @@
-import { api, toast, escapeHtml, setSession, clearSession } from './api.js';
+import { api, toast, escapeHtml, setSession, clearSession, CURRENCIES } from './api.js';
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 export async function runIfNeeded() {
   const settings = await api.settings.get();
@@ -14,7 +14,11 @@ export async function runIfNeeded() {
   const state = {
     step: 0,
     restaurant_name: settings.restaurant_name || '',
+    currency: settings.currency || 'USD',
     currency_symbol: settings.currency_symbol || '$',
+    restaurant_address: settings.restaurant_address || '',
+    gstin: settings.gstin || '',
+    gst_scheme: settings.gst_scheme || 'regular',
     tax_name: 'Sales Tax',
     tax_rate: 0,
     printer_ip: '',
@@ -41,7 +45,7 @@ function stepDots(step) {
 }
 
 function render(overlay, state, finish) {
-  const steps = [renderRestaurantStep, renderTaxStep, renderOptionalStep, renderMenuStep];
+  const steps = [renderRestaurantStep, renderBusinessStep, renderTaxStep, renderOptionalStep, renderMenuStep];
   steps[state.step](overlay, state, finish, () => render(overlay, state, finish));
 }
 
@@ -59,8 +63,10 @@ function renderRestaurantStep(overlay, state, finish, rerender) {
       <input id="wName" type="text" value="${escapeHtml(state.restaurant_name)}" />
     </div>
     <div class="form-row">
-      <label>Currency symbol</label>
-      <input id="wCurrency" type="text" value="${escapeHtml(state.currency_symbol)}" style="width:80px" />
+      <label>Currency</label>
+      <select id="wCurrency">
+        ${CURRENCIES.map((c) => `<option value="${c.code}" ${c.code === state.currency ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+      </select>
     </div>
     <div class="wizard-actions">
       <div class="spacer"></div>
@@ -75,15 +81,57 @@ function renderRestaurantStep(overlay, state, finish, rerender) {
       return;
     }
     state.restaurant_name = name;
-    state.currency_symbol = overlay.querySelector('#wCurrency').value.trim() || '$';
+    const chosen = CURRENCIES.find((c) => c.code === overlay.querySelector('#wCurrency').value) || CURRENCIES[0];
+    state.currency = chosen.code;
+    state.currency_symbol = chosen.symbol;
     state.step = 1;
+    rerender();
+  });
+}
+
+function renderBusinessStep(overlay, state, finish, rerender) {
+  overlay.innerHTML = wizardShell(`
+    ${stepDots(1)}
+    <h1 class="wizard-title">Business Details</h1>
+    <p class="wizard-subtitle">All optional — used on printed receipts if filled in. Skip if you don't need them.</p>
+    <div class="form-row">
+      <label>Address</label>
+      <input id="wAddress" type="text" value="${escapeHtml(state.restaurant_address)}" placeholder="Street, city, state, PIN" />
+    </div>
+    <div class="form-row">
+      <label>GSTIN / Tax Registration No.</label>
+      <input id="wGstin" type="text" value="${escapeHtml(state.gstin)}" placeholder="e.g. 22AAAAA0000A1Z5" />
+    </div>
+    <div class="form-row">
+      <label>GST Scheme</label>
+      <select id="wGstScheme">
+        <option value="regular" ${state.gst_scheme !== 'composite' ? 'selected' : ''}>Regular (tax shown as CGST + SGST)</option>
+        <option value="composite" ${state.gst_scheme === 'composite' ? 'selected' : ''}>Composite (tax included in price, not itemized)</option>
+      </select>
+    </div>
+    <div class="wizard-actions">
+      <button class="btn" id="wBack">Back</button>
+      <div class="spacer"></div>
+      <button class="btn primary" id="wNext">Next</button>
+    </div>
+  `);
+
+  overlay.querySelector('#wBack').addEventListener('click', () => {
+    state.step = 0;
+    rerender();
+  });
+  overlay.querySelector('#wNext').addEventListener('click', () => {
+    state.restaurant_address = overlay.querySelector('#wAddress').value.trim();
+    state.gstin = overlay.querySelector('#wGstin').value.trim();
+    state.gst_scheme = overlay.querySelector('#wGstScheme').value;
+    state.step = 2;
     rerender();
   });
 }
 
 function renderTaxStep(overlay, state, finish, rerender) {
   overlay.innerHTML = wizardShell(`
-    ${stepDots(1)}
+    ${stepDots(2)}
     <h1 class="wizard-title">Sales Tax</h1>
     <p class="wizard-subtitle">Applied automatically to every order. You can change this later in Admin.</p>
     <div class="form-row">
@@ -102,13 +150,13 @@ function renderTaxStep(overlay, state, finish, rerender) {
   `);
 
   overlay.querySelector('#wBack').addEventListener('click', () => {
-    state.step = 0;
+    state.step = 1;
     rerender();
   });
   overlay.querySelector('#wNext').addEventListener('click', () => {
     state.tax_name = overlay.querySelector('#wTaxName').value.trim() || 'Sales Tax';
     state.tax_rate = parseFloat(overlay.querySelector('#wTaxRate').value || '0');
-    state.step = 2;
+    state.step = 3;
     rerender();
   });
 }
@@ -116,7 +164,7 @@ function renderTaxStep(overlay, state, finish, rerender) {
 function renderOptionalStep(overlay, state, finish, rerender) {
   const printerAvailable = !!window.dineforge?.testPrint;
   overlay.innerHTML = wizardShell(`
-    ${stepDots(2)}
+    ${stepDots(3)}
     <h1 class="wizard-title">Optional Setup</h1>
     <p class="wizard-subtitle">Both of these can be set up later in Admin &gt; Settings — skip for now if you'd rather.</p>
     <div class="form-row">
@@ -135,7 +183,7 @@ function renderOptionalStep(overlay, state, finish, rerender) {
   `);
 
   overlay.querySelector('#wBack').addEventListener('click', () => {
-    state.step = 1;
+    state.step = 2;
     rerender();
   });
   overlay.querySelector('#wNext').addEventListener('click', () => {
@@ -145,14 +193,14 @@ function renderOptionalStep(overlay, state, finish, rerender) {
       toast('PIN must be at least 4 digits, or leave it blank', true);
       return;
     }
-    state.step = 3;
+    state.step = 4;
     rerender();
   });
 }
 
 function renderMenuStep(overlay, state, finish, rerender) {
   overlay.innerHTML = wizardShell(`
-    ${stepDots(3)}
+    ${stepDots(4)}
     <h1 class="wizard-title">Starting Menu</h1>
     <p class="wizard-subtitle">Add a few sample items to explore the app, or start with a blank menu and build your own in Admin.</p>
     <div class="wizard-actions">
@@ -164,7 +212,7 @@ function renderMenuStep(overlay, state, finish, rerender) {
   `);
 
   overlay.querySelector('#wBack').addEventListener('click', () => {
-    state.step = 2;
+    state.step = 3;
     rerender();
   });
   overlay.querySelector('#wSkipMenu').addEventListener('click', () => {
@@ -179,7 +227,7 @@ function renderMenuStep(overlay, state, finish, rerender) {
 
 async function finishWizard(overlay, state, finish) {
   overlay.innerHTML = wizardShell(`
-    ${stepDots(3)}
+    ${stepDots(4)}
     <h1 class="wizard-title">Setting things up…</h1>
     <p class="wizard-subtitle">Just a moment.</p>
   `);
@@ -196,7 +244,11 @@ async function finishWizard(overlay, state, finish) {
 
     await api.settings.update({
       restaurant_name: state.restaurant_name,
+      currency: state.currency,
       currency_symbol: state.currency_symbol,
+      restaurant_address: state.restaurant_address,
+      gstin: state.gstin,
+      gst_scheme: state.gst_scheme,
       setup_completed: '1',
     });
 

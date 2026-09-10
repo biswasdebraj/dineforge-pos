@@ -1,4 +1,4 @@
-import { api, toast, escapeHtml } from './api.js';
+import { api, toast, escapeHtml, CURRENCIES } from './api.js';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -316,9 +316,22 @@ function renderSettings() {
     <div class="section-title">Restaurant</div>
     <div class="form-row">
       <input id="setName" type="text" value="${escapeHtml(settings.restaurant_name || '')}" placeholder="Restaurant name" />
-      <input id="setCurrencySymbol" type="text" value="${escapeHtml(settings.currency_symbol || '$')}" placeholder="Currency symbol" style="width:80px" />
+      <select id="setCurrency" style="width:200px;">
+        ${CURRENCIES.map((c) => `<option value="${c.code}" ${c.code === (settings.currency || 'USD') ? 'selected' : ''}>${escapeHtml(c.label)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-row">
+      <input id="setAddress" type="text" value="${escapeHtml(settings.restaurant_address || '')}" placeholder="Address (printed on receipts)" />
+    </div>
+    <div class="form-row">
+      <input id="setGstin" type="text" value="${escapeHtml(settings.gstin || '')}" placeholder="GSTIN / Tax Registration No." style="width:220px" />
+      <select id="setGstScheme" style="width:200px;">
+        <option value="regular" ${settings.gst_scheme !== 'composite' ? 'selected' : ''}>Regular GST</option>
+        <option value="composite" ${settings.gst_scheme === 'composite' ? 'selected' : ''}>Composite GST</option>
+      </select>
       <button class="btn primary" id="saveSettingsBtn">Save</button>
     </div>
+    <div class="empty-hint">Regular: tax is itemized as CGST + SGST on receipts. Composite: prices are tax-inclusive, no tax line, disclaimer printed instead.</div>
 
     <div class="section-title">Tax</div>
     <div class="form-row">
@@ -326,7 +339,15 @@ function renderSettings() {
       <input id="taxRate" type="number" min="0" step="0.01" value="${defaultTax?.rate_percent ?? 0}" placeholder="Rate %" style="width:100px" />
       <button class="btn primary" id="saveTaxBtn">Save Tax</button>
     </div>
-    <div class="empty-hint">This rate applies automatically to every order's subtotal after discounts.</div>
+    <div class="empty-hint">This rate applies automatically to every order's subtotal after discounts. Ignored entirely under Composite GST.</div>
+
+    <div class="section-title">Delivery &amp; Packaging Charges</div>
+    <div class="form-row">
+      <input id="setDeliveryFee" type="number" min="0" step="0.01" value="${((settings.delivery_fee_default_cents || 0) / 100).toFixed(2)}" placeholder="Delivery fee" style="width:120px" />
+      <input id="setPackagingFee" type="number" min="0" step="0.01" value="${((settings.packaging_fee_default_cents || 0) / 100).toFixed(2)}" placeholder="Packaging fee" style="width:120px" />
+      <button class="btn primary" id="saveChargesBtn">Save</button>
+    </div>
+    <div class="empty-hint">Delivery orders get both charges by default; takeaway gets packaging only; dine-in gets neither. Staff can still adjust either on a specific order.</div>
 
     <div class="section-title">Receipt Printer</div>
     <div class="form-row" style="flex-direction:row;align-items:center;gap:1rem;">
@@ -508,11 +529,30 @@ function renderSettings() {
 
   panel.querySelector('#saveSettingsBtn').addEventListener('click', async () => {
     try {
+      const chosen = CURRENCIES.find((c) => c.code === panel.querySelector('#setCurrency').value) || CURRENCIES[0];
       await api.settings.update({
         restaurant_name: panel.querySelector('#setName').value.trim(),
-        currency_symbol: panel.querySelector('#setCurrencySymbol').value.trim(),
+        currency: chosen.code,
+        currency_symbol: chosen.symbol,
+        restaurant_address: panel.querySelector('#setAddress').value.trim(),
+        gstin: panel.querySelector('#setGstin').value.trim(),
+        gst_scheme: panel.querySelector('#setGstScheme').value,
       });
+      await refresh();
       toast('Settings saved');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  panel.querySelector('#saveChargesBtn').addEventListener('click', async () => {
+    try {
+      await api.settings.update({
+        delivery_fee_default_cents: Math.round(parseFloat(panel.querySelector('#setDeliveryFee').value || '0') * 100),
+        packaging_fee_default_cents: Math.round(parseFloat(panel.querySelector('#setPackagingFee').value || '0') * 100),
+      });
+      await refresh();
+      toast('Charges saved');
     } catch (err) {
       toast(err.message, true);
     }

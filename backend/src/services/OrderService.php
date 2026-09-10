@@ -38,9 +38,11 @@ final class OrderService
         $customerName = isset($input['customer_name']) ? trim((string) $input['customer_name']) : null;
         $customerName = $customerName === '' ? null : $customerName;
 
+        [$deliveryFee, $packagingFee] = $this->defaultChargesFor($orderType);
+
         $stmt = $this->pdo->prepare(
-            'INSERT INTO orders (order_number, shift_id, table_id, order_type, notes, customer_name)
-             VALUES (:order_number, :shift_id, :table_id, :order_type, :notes, :customer_name)'
+            'INSERT INTO orders (order_number, shift_id, table_id, order_type, notes, customer_name, delivery_fee_cents, packaging_fee_cents)
+             VALUES (:order_number, :shift_id, :table_id, :order_type, :notes, :customer_name, :delivery_fee_cents, :packaging_fee_cents)'
         );
         $stmt->execute([
             'order_number' => $orderNumber,
@@ -49,11 +51,52 @@ final class OrderService
             'order_type' => $orderType,
             'notes' => $input['notes'] ?? null,
             'customer_name' => $customerName,
+            'delivery_fee_cents' => $deliveryFee,
+            'packaging_fee_cents' => $packagingFee,
         ]);
 
         $orderId = (int) $this->pdo->lastInsertId();
         log_audit($this->pdo, 'order', $orderId, 'create', ['order_number' => $orderNumber]);
 
+        return $this->getFull($orderId);
+    }
+
+    // Delivery orders are packaged AND delivered; takeaway is packaged only;
+    // dine-in gets neither. Both figures come from Admin > Settings and are
+    // still editable per order afterward (see updateCharges()).
+    private function defaultChargesFor(string $orderType): array
+    {
+        $settingsStmt = $this->pdo->query(
+            "SELECT key, value FROM settings WHERE key IN ('delivery_fee_default_cents', 'packaging_fee_default_cents')"
+        );
+        $defaults = [];
+        foreach ($settingsStmt->fetchAll() as $row) {
+            $defaults[$row['key']] = (int) $row['value'];
+        }
+        $deliveryDefault = $defaults['delivery_fee_default_cents'] ?? 0;
+        $packagingDefault = $defaults['packaging_fee_default_cents'] ?? 0;
+
+        return match ($orderType) {
+            'delivery' => [$deliveryDefault, $packagingDefault],
+            'takeaway' => [0, $packagingDefault],
+            default => [0, 0],
+        };
+    }
+
+    public function updateCharges(int $orderId, ?int $deliveryFeeCents, ?int $packagingFeeCents): array
+    {
+        $order = $this->requireOpenOrder($orderId);
+
+        $stmt = $this->pdo->prepare(
+            'UPDATE orders SET delivery_fee_cents = :delivery, packaging_fee_cents = :packaging WHERE id = :id'
+        );
+        $stmt->execute([
+            'delivery' => $deliveryFeeCents ?? (int) $order['delivery_fee_cents'],
+            'packaging' => $packagingFeeCents ?? (int) $order['packaging_fee_cents'],
+            'id' => $orderId,
+        ]);
+
+        $this->recalculateTotals($orderId);
         return $this->getFull($orderId);
     }
 
@@ -440,11 +483,25 @@ final class OrderService
         $discountStmt->execute(['order_id' => $orderId]);
         $discountTotal = min($subtotal, (int) $discountStmt->fetchColumn());
 
+        $chargesStmt = $this->pdo->prepare('SELECT delivery_fee_cents, packaging_fee_cents FROM orders WHERE id = :id');
+        $chargesStmt->execute(['id' => $orderId]);
+        $charges = $chargesStmt->fetch();
+        $deliveryFee = (int) $charges['delivery_fee_cents'];
+        $packagingFee = (int) $charges['packaging_fee_cents'];
+
         $taxRateStmt = $this->pdo->query('SELECT rate_percent FROM taxes WHERE is_default = 1 AND is_active = 1 LIMIT 1');
         $taxRate = (float) ($taxRateStmt->fetchColumn() ?: 0);
 
-        $taxable = max(0, $subtotal - $discountTotal);
-        $taxTotal = (int) round($taxable * ($taxRate / 100));
+        $schemeStmt = $this->pdo->query("SELECT value FROM settings WHERE key = 'gst_scheme'");
+        $isComposite = $schemeStmt->fetchColumn() === 'composite';
+
+        // Delivery/packaging charges are part of the taxable supply, same as
+        // the food itself — taxed the same way food is, on top of the
+        // discounted subtotal. Composition dealers can't charge tax
+        // separately at all (see printReceipt's disclaimer line), so their
+        // total is just the taxable amount with nothing added on top.
+        $taxable = max(0, $subtotal - $discountTotal) + $deliveryFee + $packagingFee;
+        $taxTotal = $isComposite ? 0 : (int) round($taxable * ($taxRate / 100));
         $total = $taxable + $taxTotal;
 
         $stmt = $this->pdo->prepare(

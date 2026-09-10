@@ -226,6 +226,14 @@ $router->put('/api/orders/{id}/customer', guarded($authService, ['waiter', 'admi
     $input = json_body();
     json_response($orderService->updateCustomerName((int) $p['id'], $input['customer_name'] ?? null));
 }));
+$router->put('/api/orders/{id}/charges', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
+    $input = json_body();
+    json_response($orderService->updateCharges(
+        (int) $p['id'],
+        isset($input['delivery_fee_cents']) ? (int) $input['delivery_fee_cents'] : null,
+        isset($input['packaging_fee_cents']) ? (int) $input['packaging_fee_cents'] : null
+    ));
+}));
 $router->post('/api/orders/{id}/void', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->voidOrder((int) $p['id']));
 }));
