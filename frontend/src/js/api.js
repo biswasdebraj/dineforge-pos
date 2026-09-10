@@ -170,6 +170,10 @@ export const api = {
     updateCharges: (id, body) => apiFetch(`/api/orders/${id}/charges`, { method: 'PUT', body: JSON.stringify(body) }),
     void: (id) => apiFetch(`/api/orders/${id}/void`, { method: 'POST' }),
     pay: (id, body) => apiFetch(`/api/orders/${id}/payments`, { method: 'POST', body: JSON.stringify(body) }),
+    search: (filters = {}) => apiFetch(`/api/orders/search${qs(filters)}`),
+  },
+  reports: {
+    dailySales: (date) => apiFetch(`/api/reports/daily-sales${qs({ date })}`),
   },
 };
 

@@ -1,4 +1,4 @@
-import { api, toast, escapeHtml, CURRENCIES } from './api.js';
+import { api, toast, escapeHtml, CURRENCIES, money, showModal, closeModal } from './api.js';
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -51,10 +51,12 @@ export async function init(container) {
     <div class="admin-tabs">
       <button class="admin-tab active" data-tab="menu">Menu</button>
       <button class="admin-tab" data-tab="tables">Tables</button>
+      <button class="admin-tab" data-tab="reports">Reports</button>
       <button class="admin-tab" data-tab="settings">Settings</button>
     </div>
     <div class="admin-panel active" id="admin-menu"></div>
     <div class="admin-panel" id="admin-tables"></div>
+    <div class="admin-panel" id="admin-reports"></div>
     <div class="admin-panel" id="admin-settings"></div>
   `;
 
@@ -81,6 +83,7 @@ export async function refresh() {
   ]);
   renderMenu();
   renderTables();
+  renderReports();
   renderSettings();
 }
 
@@ -306,6 +309,170 @@ function renderTables() {
       toast(err.message, true);
     }
   });
+}
+
+function renderReports() {
+  const panel = root.querySelector('#admin-reports');
+  const today = new Date().toISOString().slice(0, 10);
+  const symbol = settings.currency_symbol || '$';
+
+  panel.innerHTML = `
+    <div class="section-title">Daily Sales</div>
+    <div class="form-row">
+      <input id="salesDate" type="date" value="${today}" />
+    </div>
+    <div id="salesReportBox">Loading…</div>
+
+    <div class="section-title">Order History</div>
+    <div class="form-row">
+      <input id="histDateFrom" type="date" />
+      <input id="histDateTo" type="date" />
+      <select id="histStatus">
+        <option value="">Any status</option>
+        <option value="open">Open</option>
+        <option value="sent_to_kitchen">Sent to Kitchen</option>
+        <option value="paid">Paid</option>
+        <option value="void">Void</option>
+      </select>
+      <select id="histType">
+        <option value="">Any type</option>
+        <option value="dine_in">Dine-in</option>
+        <option value="takeaway">Takeaway</option>
+        <option value="delivery">Delivery</option>
+      </select>
+      <button class="btn primary" id="histSearchBtn">Search</button>
+    </div>
+    <div id="orderHistoryBox"></div>
+  `;
+
+  async function loadSalesReport() {
+    const date = panel.querySelector('#salesDate').value;
+    const box = panel.querySelector('#salesReportBox');
+    box.textContent = 'Loading…';
+    try {
+      const r = await api.reports.dailySales(date);
+      box.innerHTML = `
+        <div class="report-grid">
+          <div class="report-card"><div class="report-label">Orders</div><div class="report-value">${r.order_count}</div></div>
+          <div class="report-card"><div class="report-label">Subtotal</div><div class="report-value">${money(r.subtotal_cents, symbol)}</div></div>
+          <div class="report-card"><div class="report-label">Discounts</div><div class="report-value">-${money(r.discount_total_cents, symbol)}</div></div>
+          <div class="report-card"><div class="report-label">Delivery + Packaging</div><div class="report-value">${money(r.delivery_fee_cents + r.packaging_fee_cents, symbol)}</div></div>
+          <div class="report-card"><div class="report-label">Tax</div><div class="report-value">${money(r.tax_total_cents, symbol)}</div></div>
+          <div class="report-card"><div class="report-label">Total</div><div class="report-value">${money(r.total_cents, symbol)}</div></div>
+        </div>
+        <div class="empty-hint" style="margin-top:0.5rem;">
+          Cash ${money(r.by_payment_method.cash, symbol)} &middot; Card ${money(r.by_payment_method.card, symbol)} &middot; Other ${money(r.by_payment_method.other, symbol)}
+          &nbsp;|&nbsp;
+          Dine-in ${money(r.by_order_type.dine_in, symbol)} &middot; Takeaway ${money(r.by_order_type.takeaway, symbol)} &middot; Delivery ${money(r.by_order_type.delivery, symbol)}
+        </div>
+      `;
+    } catch (err) {
+      box.innerHTML = `<div class="empty-hint">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  panel.querySelector('#salesDate').addEventListener('change', loadSalesReport);
+  loadSalesReport();
+
+  async function loadOrderHistory() {
+    const box = panel.querySelector('#orderHistoryBox');
+    box.textContent = 'Loading…';
+    try {
+      const results = await api.orders.search({
+        date_from: panel.querySelector('#histDateFrom').value,
+        date_to: panel.querySelector('#histDateTo').value,
+        status: panel.querySelector('#histStatus').value,
+        order_type: panel.querySelector('#histType').value,
+      });
+      if (results.length === 0) {
+        box.innerHTML = '<div class="empty-hint">No orders match.</div>';
+        return;
+      }
+      box.innerHTML = `
+        <table class="data-table">
+          <thead><tr><th>Order #</th><th>Date</th><th>Type</th><th>Status</th><th>Total</th><th></th></tr></thead>
+          <tbody>
+            ${results
+              .map(
+                (o) => `
+              <tr>
+                <td>${escapeHtml(o.order_number)}</td>
+                <td>${escapeHtml(o.opened_at)}</td>
+                <td>${escapeHtml(o.order_type)}</td>
+                <td>${escapeHtml(o.status.replace(/_/g, ' '))}</td>
+                <td>${money(o.total_cents, symbol)}</td>
+                <td><a href="#" data-view-order="${o.id}">View</a></td>
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+        </table>
+      `;
+      box.querySelectorAll('[data-view-order]').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          showOrderDetail(Number(link.dataset.viewOrder));
+        });
+      });
+    } catch (err) {
+      box.innerHTML = `<div class="empty-hint">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  panel.querySelector('#histSearchBtn').addEventListener('click', loadOrderHistory);
+  loadOrderHistory();
+}
+
+async function showOrderDetail(orderId) {
+  const symbol = settings.currency_symbol || '$';
+  let order;
+  try {
+    order = await api.orders.get(orderId);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+
+  const itemRows = order.items
+    .map(
+      (item) => `
+      <div class="row${item.status === 'void' ? '' : ''}">
+        <span>${item.quantity}x ${escapeHtml(item.item_name)}${item.status === 'void' ? ' (void)' : ''}</span>
+        <span>${money(item.unit_price_cents * item.quantity, symbol)}</span>
+      </div>
+    `
+    )
+    .join('');
+
+  const paymentRows = order.payments
+    .map((p) => `<div class="row"><span>Paid (${escapeHtml(p.method)})</span><span>${money(p.amount_cents, symbol)}</span></div>`)
+    .join('');
+
+  showModal(
+    `
+    <h2>Order #${escapeHtml(order.order_number)}</h2>
+    <p class="empty-hint">${escapeHtml(order.order_type)} &middot; ${escapeHtml(order.status.replace(/_/g, ' '))} &middot; ${escapeHtml(order.opened_at)}</p>
+    ${order.customer_name ? `<p class="empty-hint">Customer: ${escapeHtml(order.customer_name)}</p>` : ''}
+    <div class="cart-totals">
+      ${itemRows}
+      <hr />
+      <div class="row"><span>Subtotal</span><span>${money(order.subtotal_cents, symbol)}</span></div>
+      ${order.discount_total_cents ? `<div class="row"><span>Discount</span><span>-${money(order.discount_total_cents, symbol)}</span></div>` : ''}
+      ${order.delivery_fee_cents ? `<div class="row"><span>Delivery Fee</span><span>${money(order.delivery_fee_cents, symbol)}</span></div>` : ''}
+      ${order.packaging_fee_cents ? `<div class="row"><span>Packaging Fee</span><span>${money(order.packaging_fee_cents, symbol)}</span></div>` : ''}
+      <div class="row"><span>Tax</span><span>${money(order.tax_total_cents, symbol)}</span></div>
+      <div class="row total"><span>Total</span><span>${money(order.total_cents, symbol)}</span></div>
+      ${paymentRows}
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="orderDetailClose">Close</button>
+    </div>
+  `,
+    (modal) => {
+      modal.querySelector('#orderDetailClose').addEventListener('click', closeModal);
+    }
+  );
 }
 
 function renderSettings() {

@@ -345,4 +345,49 @@ final class OrderServiceTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->orders->recordPayment((int) $order['id'], ['method' => 'cash', 'amount_cents' => 500]);
     }
+
+    public function testSearchFiltersByStatus(): void
+    {
+        $open = $this->orders->create([]);
+        $toVoid = $this->orders->create([]);
+        $this->orders->voidOrder((int) $toVoid['id']);
+
+        $results = $this->orders->search(['status' => 'void']);
+
+        $this->assertCount(1, $results);
+        $this->assertSame((int) $toVoid['id'], (int) $results[0]['id']);
+    }
+
+    public function testSearchFiltersByOrderType(): void
+    {
+        $this->orders->create(['order_type' => 'dine_in']);
+        $delivery = $this->orders->create(['order_type' => 'delivery']);
+
+        $results = $this->orders->search(['order_type' => 'delivery']);
+
+        $this->assertCount(1, $results);
+        $this->assertSame((int) $delivery['id'], (int) $results[0]['id']);
+    }
+
+    public function testSearchFiltersByDateRange(): void
+    {
+        $order = $this->orders->create([]);
+        $this->pdo->prepare('UPDATE orders SET opened_at = :dt WHERE id = :id')
+            ->execute(['dt' => '2020-01-01 10:00:00', 'id' => $order['id']]);
+
+        $this->assertCount(0, $this->orders->search(['date_from' => '2025-01-01']));
+        $this->assertCount(1, $this->orders->search(['date_to' => '2020-12-31']));
+    }
+
+    public function testSearchWithNoFiltersReturnsAllOrdersNewestFirst(): void
+    {
+        $first = $this->orders->create([]);
+        $second = $this->orders->create([]);
+
+        $results = $this->orders->search([]);
+
+        $this->assertCount(2, $results);
+        $this->assertSame((int) $second['id'], (int) $results[0]['id']);
+        $this->assertSame((int) $first['id'], (int) $results[1]['id']);
+    }
 }

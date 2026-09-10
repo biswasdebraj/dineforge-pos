@@ -186,6 +186,10 @@ table.data-table th { color: var(--text-dim); font-weight: 600; font-size: 0.85r
   border-radius: 6px; padding: 0.4rem 0.6rem;
 }
 .section-title { margin: 1.5rem 0 0.5rem; font-size: 1rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; }
+.report-card { background: var(--panel-alt); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; }
+.report-label { font-size: 0.8rem; color: var(--text-dim); }
+.report-value { font-size: 1.3rem; font-weight: 700; margin-top: 0.2rem; }
 .inline-btn { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 0.85rem; padding: 0.2rem 0.4rem; }
 .inline-btn.danger { color: var(--danger); }
 

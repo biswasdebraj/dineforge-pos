@@ -20,6 +20,7 @@ require_once __DIR__ . '/../src/services/OrderService.php';
 require_once __DIR__ . '/../src/services/SettingsService.php';
 require_once __DIR__ . '/../src/services/BackupService.php';
 require_once __DIR__ . '/../src/services/AuthService.php';
+require_once __DIR__ . '/../src/services/ReportService.php';
 
 $pdo = get_db_connection();
 $menuService = new MenuService($pdo);
@@ -28,6 +29,7 @@ $orderService = new OrderService($pdo);
 $settingsService = new SettingsService($pdo);
 $backupService = new BackupService($pdo, get_data_dir() . '/backups');
 $authService = new AuthService($pdo);
+$reportService = new ReportService($pdo);
 
 $router = new Router();
 
@@ -197,6 +199,12 @@ $router->get('/api/orders', guarded($authService, ['waiter', 'kitchen', 'admin']
 $router->post('/api/orders', guarded($authService, ['waiter', 'admin'], function () use ($orderService) {
     json_response($orderService->create(json_body()), 201);
 }));
+// Registered before /api/orders/{id} — the router matches routes in
+// registration order and {id} is a catch-all ([^/]+), so "search" would
+// otherwise be swallowed as an id there instead of reaching this handler.
+$router->get('/api/orders/search', guarded($authService, ['admin'], function () use ($orderService) {
+    json_response($orderService->search($_GET));
+}));
 $router->get('/api/orders/{id}', guarded($authService, ['waiter', 'kitchen', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->getFull((int) $p['id']));
 }));
@@ -239,6 +247,12 @@ $router->post('/api/orders/{id}/void', guarded($authService, ['waiter', 'admin']
 }));
 $router->post('/api/orders/{id}/payments', guarded($authService, ['waiter', 'admin'], function (array $p) use ($orderService) {
     json_response($orderService->recordPayment((int) $p['id'], json_body()), 201);
+}));
+
+// Reports — business figures, admin-only.
+$router->get('/api/reports/daily-sales', guarded($authService, ['admin'], function () use ($reportService) {
+    $date = $_GET['date'] ?? date('Y-m-d');
+    json_response($reportService->dailySales($date));
 }));
 
 header('Access-Control-Allow-Origin: *');

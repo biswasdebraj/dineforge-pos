@@ -20,6 +20,41 @@ final class OrderService
         return $stmt->fetchAll();
     }
 
+    // Order History: unlike list()/listFull() (used by the POS/KDS views,
+    // which only ever care about currently-active orders), this browses
+    // every order ever placed — paid, voided, any date — so it takes real
+    // filters and a page size rather than just a status.
+    public function search(array $filters): array
+    {
+        $conditions = [];
+        $params = [];
+
+        if (!empty($filters['status'])) {
+            $conditions[] = 'status = :status';
+            $params['status'] = $filters['status'];
+        }
+        if (!empty($filters['order_type'])) {
+            $conditions[] = 'order_type = :order_type';
+            $params['order_type'] = $filters['order_type'];
+        }
+        if (!empty($filters['date_from'])) {
+            $conditions[] = 'DATE(opened_at) >= :date_from';
+            $params['date_from'] = $filters['date_from'];
+        }
+        if (!empty($filters['date_to'])) {
+            $conditions[] = 'DATE(opened_at) <= :date_to';
+            $params['date_to'] = $filters['date_to'];
+        }
+
+        $where = $conditions !== [] ? 'WHERE ' . implode(' AND ', $conditions) : '';
+        $limit = min(500, max(1, (int) ($filters['limit'] ?? 100)));
+        $offset = max(0, (int) ($filters['offset'] ?? 0));
+
+        $stmt = $this->pdo->prepare("SELECT * FROM orders $where ORDER BY id DESC LIMIT $limit OFFSET $offset");
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
+
     public function create(array $input): array
     {
         $orderType = $input['order_type'] ?? 'dine_in';
