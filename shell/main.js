@@ -8,6 +8,7 @@ const QRCode = require('qrcode');
 const { autoUpdater } = require('electron-updater');
 const logger = require('./logger');
 const printerModule = require('./printer');
+const gdiPrinterModule = require('./gdi-printer');
 
 const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const MAX_RESTART_ATTEMPTS = 5;
@@ -390,10 +391,19 @@ function fetchJson(path, token) {
   });
 }
 
+// 'standard' means an ordinary Windows printer (laser/inkjet) — rendered as
+// an HTML page and sent through Electron's real print pipeline instead of
+// raw ESC/POS, which only thermal receipt printers understand. See
+// gdi-printer.js for why this needed to be a separate path entirely rather
+// than another printer.js interface.
+function printerFor(settings) {
+  return settings.printer_connection === 'standard' ? gdiPrinterModule : printerModule;
+}
+
 ipcMain.handle('test-print', async (event, token) => {
   try {
     const settings = await fetchJson('/api/settings', token);
-    return await printerModule.testPrint(settings);
+    return await printerFor(settings).testPrint(settings);
   } catch (err) {
     logger.error(`test-print failed: ${err.message}`);
     return { success: false, message: err.message };
@@ -412,7 +422,7 @@ ipcMain.handle('list-usb-printers', async () => {
 ipcMain.handle('open-cash-drawer', async (event, token) => {
   try {
     const settings = await fetchJson('/api/settings', token);
-    return await printerModule.openCashDrawer(settings);
+    return await printerFor(settings).openCashDrawer(settings);
   } catch (err) {
     logger.error(`open-cash-drawer failed: ${err.message}`);
     return { success: false, message: err.message };
@@ -425,7 +435,7 @@ ipcMain.handle('print-receipt', async (event, orderId, token) => {
       fetchJson(`/api/orders/${orderId}`, token),
       fetchJson('/api/settings', token),
     ]);
-    return await printerModule.printReceipt(settings, order);
+    return await printerFor(settings).printReceipt(settings, order);
   } catch (err) {
     logger.error(`print-receipt failed: ${err.message}`);
     return { success: false, message: err.message };
@@ -440,7 +450,7 @@ ipcMain.handle('print-kot', async (event, orderId, itemIds, token) => {
       fetchJson('/api/tables', token),
     ]);
     const table = tables.find((t) => t.id === order.table_id);
-    return await printerModule.printKOT(settings, { ...order, table_label: table?.label }, itemIds);
+    return await printerFor(settings).printKOT(settings, { ...order, table_label: table?.label }, itemIds);
   } catch (err) {
     logger.error(`print-kot failed: ${err.message}`);
     return { success: false, message: err.message };

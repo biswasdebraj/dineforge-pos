@@ -597,18 +597,19 @@ function renderSettings() {
 
     <div class="section-title">Receipt Printer</div>
     <div class="form-row" style="flex-direction:row;align-items:center;gap:1rem;">
-      <label style="margin:0;"><input type="radio" name="printerConnection" value="network" ${settings.printer_connection !== 'usb' ? 'checked' : ''} /> Network</label>
-      <label style="margin:0;"><input type="radio" name="printerConnection" value="usb" ${settings.printer_connection === 'usb' ? 'checked' : ''} /> USB</label>
+      <label style="margin:0;"><input type="radio" name="printerConnection" value="network" ${settings.printer_connection !== 'usb' && settings.printer_connection !== 'standard' ? 'checked' : ''} /> Network (thermal)</label>
+      <label style="margin:0;"><input type="radio" name="printerConnection" value="usb" ${settings.printer_connection === 'usb' ? 'checked' : ''} /> USB (thermal)</label>
+      <label style="margin:0;"><input type="radio" name="printerConnection" value="standard" ${settings.printer_connection === 'standard' ? 'checked' : ''} /> Standard printer</label>
     </div>
     <div class="form-row" id="printerNetworkRow">
       <input id="printerIp" type="text" value="${escapeHtml(settings.printer_ip || '')}" placeholder="Printer IP address" style="width:160px" />
       <input id="printerPort" type="text" value="${escapeHtml(settings.printer_port || '9100')}" placeholder="Port" style="width:80px" />
     </div>
-    <div class="form-row" id="printerUsbRow" hidden>
+    <div class="form-row" id="printerDeviceRow" hidden>
       <select id="printerName" style="min-width:220px;"><option value="">Loading…</option></select>
       <button class="btn" id="refreshPrintersBtn" type="button">Refresh</button>
     </div>
-    <div class="form-row">
+    <div class="form-row" id="printerTypeRow">
       <select id="printerType">
         <option value="epson" ${settings.printer_type !== 'star' ? 'selected' : ''}>Epson-compatible</option>
         <option value="star" ${settings.printer_type === 'star' ? 'selected' : ''}>Star</option>
@@ -619,7 +620,7 @@ function renderSettings() {
       <button class="btn" id="testPrintBtn">Test Print</button>
       <button class="btn" id="openDrawerBtn">Open Cash Drawer</button>
     </div>
-    <div class="empty-hint">Network (Ethernet/Wi-Fi) ESC/POS printers, e.g. 192.168.1.50, or a USB thermal printer already installed in Windows. Only available in the desktop app, not a browser tab.</div>
+    <div class="empty-hint">Network/USB: ESC/POS thermal receipt printers. Standard: any regular Windows printer (laser, inkjet) — prints a full page instead of a receipt strip, no cash drawer support. Only available in the desktop app, not a browser tab.</div>
 
     <div class="section-title">Backups</div>
     <div class="form-row">
@@ -709,13 +710,17 @@ function renderSettings() {
   });
 
   const printerNetworkRow = panel.querySelector('#printerNetworkRow');
-  const printerUsbRow = panel.querySelector('#printerUsbRow');
+  const printerDeviceRow = panel.querySelector('#printerDeviceRow');
+  const printerTypeRow = panel.querySelector('#printerTypeRow');
   const printerNameSelect = panel.querySelector('#printerName');
 
   function updatePrinterConnectionRows() {
-    const usb = panel.querySelector('input[name="printerConnection"]:checked').value === 'usb';
-    printerNetworkRow.hidden = usb;
-    printerUsbRow.hidden = !usb;
+    const connection = panel.querySelector('input[name="printerConnection"]:checked').value;
+    printerNetworkRow.hidden = connection !== 'network';
+    printerDeviceRow.hidden = connection === 'network';
+    // printerType (Epson/Star command dialect) only means anything for the
+    // ESC/POS paths — a standard printer uses its own real driver instead.
+    printerTypeRow.querySelector('#printerType').hidden = connection === 'standard';
   }
   panel.querySelectorAll('input[name="printerConnection"]').forEach((radio) => {
     radio.addEventListener('change', updatePrinterConnectionRows);

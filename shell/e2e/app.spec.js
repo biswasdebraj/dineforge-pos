@@ -142,7 +142,7 @@ test.describe('DineForge POS smoke test', () => {
     await window.getByRole('button', { name: 'Settings', exact: true }).click();
 
     await window.locator('input[name="printerConnection"][value="usb"]').check();
-    await expect(window.locator('#printerUsbRow')).toBeVisible();
+    await expect(window.locator('#printerDeviceRow')).toBeVisible();
     await expect(window.locator('#printerNetworkRow')).toBeHidden();
 
     const printerOptions = window.locator('#printerName option');
