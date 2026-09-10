@@ -349,6 +349,13 @@ function renderSettings() {
     </div>
     <div class="empty-hint">Delivery orders get both charges by default; takeaway gets packaging only; dine-in gets neither. Staff can still adjust either on a specific order.</div>
 
+    <div class="section-title">UPI Payment</div>
+    <div class="form-row">
+      <input id="setUpiId" type="text" value="${escapeHtml(settings.upi_id || '')}" placeholder="UPI ID, e.g. restaurant@okhdfcbank" style="width:260px" />
+      <button class="btn primary" id="saveUpiBtn">Save</button>
+    </div>
+    <div class="empty-hint">When set, receipts print a UPI QR code pre-filled with the exact amount due — the customer scans and pays without typing anything.</div>
+
     <div class="section-title">Receipt Printer</div>
     <div class="form-row" style="flex-direction:row;align-items:center;gap:1rem;">
       <label style="margin:0;"><input type="radio" name="printerConnection" value="network" ${settings.printer_connection !== 'usb' ? 'checked' : ''} /> Network</label>
@@ -553,6 +560,16 @@ function renderSettings() {
       });
       await refresh();
       toast('Charges saved');
+    } catch (err) {
+      toast(err.message, true);
+    }
+  });
+
+  panel.querySelector('#saveUpiBtn').addEventListener('click', async () => {
+    try {
+      await api.settings.update({ upi_id: panel.querySelector('#setUpiId').value.trim() });
+      await refresh();
+      toast('UPI ID saved');
     } catch (err) {
       toast(err.message, true);
     }

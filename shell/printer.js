@@ -198,6 +198,23 @@ async function printReceipt(settings, order) {
     }
   }
 
+  if (settings.upi_id) {
+    // Standard UPI deep-link scheme (pa=payee VPA, am=amount, cu=currency,
+    // tn=note) — any UPI app pre-fills the exact amount from this, so the
+    // customer only has to confirm and authenticate, never type a number.
+    const upiParams = new URLSearchParams({
+      pa: settings.upi_id,
+      pn: settings.restaurant_name || 'DineForge POS',
+      am: (order.total_cents / 100).toFixed(2),
+      cu: 'INR',
+      tn: `Order ${order.order_number}`,
+    });
+    printer.alignCenter();
+    printer.println('');
+    printer.println('Scan to pay via UPI');
+    printer.printQR(`upi://pay?${upiParams.toString()}`, { cellSize: 6, correction: 'M' });
+  }
+
   printer.drawLine();
   printer.alignCenter();
   printer.println('Thank you!');
