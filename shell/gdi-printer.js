@@ -75,7 +75,9 @@ async function buildReceiptHtml(settings, order) {
     if (payment.change_due_cents) html += `<div class="row"><span>Change</span><span>${money(payment.change_due_cents, symbol)}</span></div>`;
   }
 
-  if (settings.upi_id) {
+  // Same reasoning as printer.js: only show "scan to pay" on a bill printed
+  // before payment is recorded, never on a receipt for an already-paid order.
+  if (settings.upi_id && order.status !== 'paid') {
     const upiParams = new URLSearchParams({
       pa: settings.upi_id,
       pn: settings.restaurant_name || 'DineForge POS',

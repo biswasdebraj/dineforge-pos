@@ -1,4 +1,5 @@
 import { api, money, toast, escapeHtml, showModal, closeModal, apiUrl, getSession } from './api.js';
+import qrcode from './vendor/qrcode.mjs';
 
 let categories = [];
 let items = [];
@@ -583,10 +584,28 @@ function onOpenDiscountModal() {
   });
 }
 
-function onOpenPaymentModal() {
+// UPI deep-link — mirrors shell/printer.js and shell/gdi-printer.js exactly
+// (pa=payee VPA, am=amount, cu=currency, tn=note). Rendered client-side here
+// so it works on any LAN device (waiter phones/tablets), not just the
+// desktop terminal — the printer-side QR is a separate render for paper.
+function buildUpiUri(settings, order) {
+  const params = new URLSearchParams({
+    pa: settings.upi_id,
+    pn: settings.restaurant_name || 'DineForge POS',
+    am: (order.total_cents / 100).toFixed(2),
+    cu: 'INR',
+    tn: `Order ${order.order_number}`,
+  });
+  return `upi://pay?${params.toString()}`;
+}
+
+async function onOpenPaymentModal() {
   if (!currentOrder) return;
   const totalDue = currentOrder.total_cents;
   let method = 'cash';
+
+  const settings = await api.settings.get();
+  const upiUri = settings.upi_id ? buildUpiUri(settings, currentOrder) : null;
 
   showModal(`
     <h2>Pay Order #${currentOrder.order_number}</h2>
@@ -598,11 +617,18 @@ function onOpenPaymentModal() {
     <div class="form-row"><label>Amount Due</label><input id="payAmount" type="text" value="${(totalDue / 100).toFixed(2)}" disabled /></div>
     <div class="form-row" id="tenderedRow"><label>Tendered</label><input id="payTendered" type="number" min="0" step="0.01" value="${(totalDue / 100).toFixed(2)}" /></div>
     <div class="form-row"><label>Change Due</label><input id="payChange" type="text" value="${money(0, currencySymbol)}" disabled /></div>
+    ${upiUri ? `
+    <div class="upi-qr-box">
+      <div id="payUpiQr"></div>
+      <p class="empty-hint" style="margin:0.4rem 0 0;">Customer scans to pay via UPI — mark paid below once received.</p>
+    </div>` : ''}
     <div class="form-row" style="flex-direction:row;align-items:center;gap:0.5rem;">
       <input id="payPrintReceipt" type="checkbox" checked />
       <label style="margin:0;">Print receipt</label>
     </div>
     <div class="modal-actions">
+      <button class="btn" id="payPrintBill">Print Bill</button>
+      <div class="spacer"></div>
       <button class="btn" id="payCancel">Cancel</button>
       <button class="btn primary" id="payConfirm">Confirm Payment</button>
     </div>
@@ -610,6 +636,13 @@ function onOpenPaymentModal() {
     const tenderedInput = modal.querySelector('#payTendered');
     const changeOut = modal.querySelector('#payChange');
     const tenderedRow = modal.querySelector('#tenderedRow');
+
+    if (upiUri) {
+      const qr = qrcode(0, 'M');
+      qr.addData(upiUri);
+      qr.make();
+      modal.querySelector('#payUpiQr').innerHTML = qr.createSvgTag(6, 0);
+    }
 
     function updateChange() {
       const tendered = Math.round(parseFloat(tenderedInput.value || '0') * 100);
@@ -625,6 +658,19 @@ function onOpenPaymentModal() {
         modal.querySelectorAll('.method-picker button').forEach((b) => b.classList.toggle('active', b === btn));
         tenderedRow.style.display = method === 'cash' ? 'flex' : 'none';
       });
+    });
+
+    // Prints the current (still-unpaid) order as a bill — the backend only
+    // includes the UPI QR on a printed receipt when the order isn't paid
+    // yet, so this is the one path that actually shows it on paper.
+    modal.querySelector('#payPrintBill').addEventListener('click', async () => {
+      if (!window.dineforge?.printReceipt) {
+        toast('Printing is only available on the desktop app, not this device', true);
+        return;
+      }
+      const r = await window.dineforge.printReceipt(currentOrder.id, getSession()?.token);
+      if (!r.success) toast(r.message || 'Bill did not print', true);
+      else toast('Bill sent to printer');
     });
 
     modal.querySelector('#payCancel').addEventListener('click', closeModal);

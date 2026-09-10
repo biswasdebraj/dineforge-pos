@@ -198,7 +198,10 @@ async function printReceipt(settings, order) {
     }
   }
 
-  if (settings.upi_id) {
+  // Only shows on a bill printed BEFORE payment is recorded — once the
+  // order is 'paid', the money's already changed hands, so a "scan to pay"
+  // code on the receipt would just be confusing.
+  if (settings.upi_id && order.status !== 'paid') {
     // Standard UPI deep-link scheme (pa=payee VPA, am=amount, cu=currency,
     // tn=note) — any UPI app pre-fills the exact amount from this, so the
     // customer only has to confirm and authenticate, never type a number.

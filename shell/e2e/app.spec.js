@@ -8,10 +8,15 @@ const path = require('path');
 const fs = require('fs');
 const net = require('net');
 
-// Matches Electron's default userData path (app.getPath('userData')), which
-// is based on package.json's "name" field, not electron-builder's
-// productName — confirmed by inspecting a real dev run's actual DB location.
-const DB_FILE = path.join(process.env.APPDATA, 'dineforge-pos-shell', 'data', 'dineforge.sqlite');
+// Electron's default userData path (app.getPath('userData')) is based on
+// package.json's "name" field — the SAME path a real installed copy of the
+// app uses, dev or packaged. Launching with --user-data-dir here points this
+// suite at an isolated profile instead, so running it can never touch (or
+// resetDb() delete) anyone's real restaurant data. Learned this the hard way
+// after this exact suite — launched without the override — wiped real data
+// on a machine that also had a real install running on it this session.
+const TEST_USER_DATA_DIR = path.join(require('os').tmpdir(), 'dineforge-e2e-test-profile');
+const DB_FILE = path.join(TEST_USER_DATA_DIR, 'data', 'dineforge.sqlite');
 
 function resetDb() {
   for (const suffix of ['', '-shm', '-wal']) {
@@ -28,7 +33,10 @@ test.describe('DineForge POS smoke test', () => {
 
   test.beforeAll(async () => {
     resetDb();
-    electronApp = await _electron.launch({ args: ['.'], cwd: path.join(__dirname, '..') });
+    electronApp = await _electron.launch({
+      args: ['.', `--user-data-dir=${TEST_USER_DATA_DIR}`],
+      cwd: path.join(__dirname, '..'),
+    });
     window = await electronApp.firstWindow();
     await window.waitForLoadState('domcontentloaded');
   });
