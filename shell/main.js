@@ -406,6 +406,21 @@ ipcMain.handle('print-receipt', async (event, orderId) => {
   }
 });
 
+ipcMain.handle('print-kot', async (event, orderId, itemIds) => {
+  try {
+    const [order, settings, tables] = await Promise.all([
+      fetchJson(`/api/orders/${orderId}`),
+      fetchJson('/api/settings'),
+      fetchJson('/api/tables'),
+    ]);
+    const table = tables.find((t) => t.id === order.table_id);
+    return await printerModule.printKOT(settings, { ...order, table_label: table?.label }, itemIds);
+  } catch (err) {
+    logger.error(`print-kot failed: ${err.message}`);
+    return { success: false, message: err.message };
+  }
+});
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();

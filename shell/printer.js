@@ -97,4 +97,46 @@ async function printReceipt(settings, order) {
   return { success: true };
 }
 
-module.exports = { testPrint, openCashDrawer, printReceipt };
+async function printKOT(settings, order, itemIds) {
+  const printer = buildPrinter(settings);
+
+  const items = order.items.filter((item) => item.status !== 'void' && (!itemIds || itemIds.includes(item.id)));
+  if (items.length === 0) {
+    return { success: false, message: 'Nothing to print — no items on this ticket' };
+  }
+
+  printer.alignCenter();
+  printer.bold(true);
+  printer.setTextDoubleHeight();
+  printer.println('KITCHEN ORDER');
+  printer.setTextNormal();
+  printer.bold(false);
+  const tableLabel = order.order_type === 'dine_in' && order.table_label ? ` · ${order.table_label}` : '';
+  printer.println(`Order #${order.order_number}${tableLabel}`);
+  if (order.customer_name) {
+    printer.println(`Customer: ${order.customer_name}`);
+  }
+  printer.println(new Date().toLocaleString());
+  printer.drawLine();
+
+  printer.alignLeft();
+  printer.setTextDoubleHeight();
+  for (const item of items) {
+    printer.println(`${item.quantity}x ${item.item_name}`);
+    printer.setTextNormal();
+    for (const mod of item.modifiers) {
+      printer.println(`   + ${mod.modifier_name}`);
+    }
+    if (item.notes) {
+      printer.println(`   note: ${item.notes}`);
+    }
+    printer.setTextDoubleHeight();
+  }
+  printer.setTextNormal();
+
+  printer.cut();
+  await printer.execute();
+  return { success: true };
+}
+
+module.exports = { testPrint, openCashDrawer, printReceipt, printKOT };

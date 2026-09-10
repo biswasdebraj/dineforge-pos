@@ -105,6 +105,19 @@ test.describe('DineForge POS smoke test', () => {
     await window.getByRole('button', { name: 'Send to Kitchen' }).click();
     await expect(window.locator('#orderLabel')).toContainText('sent to kitchen');
 
+    // Sending to kitchen fires an automatic KOT print attempt — no printer is
+    // configured in this test environment, so it fails gracefully (toast)
+    // exactly like the receipt/cash-drawer attempts below, rather than
+    // crashing or hanging the app.
+    await expect(window.getByText(/Printer IP address is not configured/).first()).toBeVisible({ timeout: 8000 });
+
+    // The manual reprint button hits the same code path and should be
+    // enabled now that the order has sent (non-pending) items. It surfaces
+    // the same "not configured" message from buildPrinter(), not a generic
+    // fallback, since the backend call succeeds but reports failure.
+    await window.getByRole('button', { name: 'Print KOT' }).click();
+    await expect(window.getByText(/Printer IP address is not configured/).first()).toBeVisible({ timeout: 8000 });
+
     await window.getByRole('button', { name: 'Pay', exact: true }).click();
     await window.getByRole('button', { name: 'Confirm Payment' }).click();
     await expect(window.locator('#orderLabel')).toContainText('No order selected');

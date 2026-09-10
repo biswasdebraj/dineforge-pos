@@ -43,6 +43,7 @@ export async function init(root, ctx) {
         <div class="cart-actions">
           <button class="btn" id="discountBtn" disabled>Apply Discount</button>
           <button class="btn" id="sendBtn" disabled>Send to Kitchen</button>
+          <button class="btn" id="printKotBtn" disabled>Print KOT</button>
           <button class="btn primary" id="payBtn" disabled>Pay</button>
           <button class="btn danger" id="voidOrderBtn" disabled>Void Order</button>
         </div>
@@ -66,6 +67,7 @@ export async function init(root, ctx) {
     cartTotals: root.querySelector('#cartTotals'),
     discountBtn: root.querySelector('#discountBtn'),
     sendBtn: root.querySelector('#sendBtn'),
+    printKotBtn: root.querySelector('#printKotBtn'),
     payBtn: root.querySelector('#payBtn'),
     voidOrderBtn: root.querySelector('#voidOrderBtn'),
   };
@@ -74,6 +76,7 @@ export async function init(root, ctx) {
   els.editCustomerBtn.addEventListener('click', onEditCustomerName);
   els.orderPicker.addEventListener('change', onPickOrder);
   els.sendBtn.addEventListener('click', onSendToKitchen);
+  els.printKotBtn.addEventListener('click', onPrintKOT);
   els.voidOrderBtn.addEventListener('click', onVoidOrder);
   els.discountBtn.addEventListener('click', onOpenDiscountModal);
   els.payBtn.addEventListener('click', onOpenPaymentModal);
@@ -372,6 +375,7 @@ function setActionsEnabled(enabled, order = null) {
   els.discountBtn.disabled = !enabled;
   els.voidOrderBtn.disabled = !enabled;
   els.sendBtn.disabled = !enabled || !order || order.items.every((i) => i.status !== 'pending');
+  els.printKotBtn.disabled = !enabled || !order || order.items.every((i) => i.status === 'pending' || i.status === 'void');
   els.payBtn.disabled = !enabled || !order || order.total_cents <= 0;
 }
 
@@ -402,12 +406,32 @@ async function onVoidItem(item) {
 async function onSendToKitchen() {
   if (!currentOrder) return;
   try {
+    const newlySentIds = currentOrder.items.filter((i) => i.status === 'pending').map((i) => i.id);
     currentOrder = await api.orders.send(currentOrder.id);
     toast('Sent to kitchen');
     renderCart();
+
+    if (newlySentIds.length && window.dineforge?.printKOT) {
+      window.dineforge.printKOT(currentOrder.id, newlySentIds).then((r) => {
+        if (!r.success) toast(r.message || 'KOT did not print', true);
+      });
+    }
   } catch (err) {
     toast(err.message, true);
   }
+}
+
+async function onPrintKOT() {
+  if (!currentOrder) return;
+  if (!window.dineforge?.printKOT) {
+    toast('Printing is only available on the desktop app, not this device', true);
+    return;
+  }
+  const itemIds = currentOrder.items.filter((i) => i.status !== 'pending' && i.status !== 'void').map((i) => i.id);
+  if (!itemIds.length) return;
+  const r = await window.dineforge.printKOT(currentOrder.id, itemIds);
+  if (!r.success) toast(r.message || 'KOT did not print', true);
+  else toast('KOT sent to printer');
 }
 
 async function onVoidOrder() {

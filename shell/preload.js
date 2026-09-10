@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('dineforge', {
   testPrint: () => ipcRenderer.invoke('test-print'),
   openCashDrawer: () => ipcRenderer.invoke('open-cash-drawer'),
   printReceipt: (orderId) => ipcRenderer.invoke('print-receipt', orderId),
+  printKOT: (orderId, itemIds) => ipcRenderer.invoke('print-kot', orderId, itemIds),
   getLanInfo: () => ipcRenderer.invoke('get-lan-info'),
 });
