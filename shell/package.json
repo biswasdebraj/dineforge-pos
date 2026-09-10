@@ -1,6 +1,6 @@
 {
   "name": "dineforge-pos-shell",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "DineForge POS desktop shell (Electron + Node orchestrating a PHP/SQLite backend)",
   "main": "main.js",
