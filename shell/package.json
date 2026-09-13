@@ -9,7 +9,8 @@
     "test:e2e": "playwright test",
     "predist": "node -e \"if(!require('fs').existsSync('resources/php/php.exe')){console.error('PHP runtime not found. Run: powershell -ExecutionPolicy Bypass -File scripts/fetch-php.ps1');process.exit(1);}\"",
     "dist": "electron-builder --win",
-    "release": "electron-builder --win --publish always"
+    "release": "electron-builder --win --publish always",
+    "postrelease": "powershell -ExecutionPolicy Bypass -File scripts/verify-release.ps1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
