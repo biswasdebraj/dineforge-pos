@@ -22,6 +22,24 @@ function resetDb() {
   }
 }
 
+// app.js's boot() renders the POS view (posView.init(), including the "New
+// Order" button) *before* it initializes the Admin view and finally calls
+// switchView(allowedTabs[0] || 'pos') as its very last line - which for the
+// admin role always resolves to 'pos'. Waiting only for "New Order" to
+// appear (as app.spec.js does, since it never leaves the POS view) races
+// that trailing switchView('pos') call: clicking "Admin" in the gap silently
+// gets undone a moment later when boot() finally reaches its own switch.
+// #downloadTemplateLink is rendered by adminView.init() (via renderMenu()),
+// the step immediately before that trailing switchView() call - and since
+// switchView() runs synchronously in the same tick right after
+// adminView.init()'s promise resolves, observing this element existing
+// means switchView() has already run too. (".tab.active" doesn't work as a
+// signal here: index.html hardcodes it on the POS tab by default, so it's
+// already "true" before boot() ever runs.)
+async function waitForBootComplete(window) {
+  await expect(window.locator('#downloadTemplateLink')).toBeAttached();
+}
+
 test.describe('DineForge POS admin features', () => {
   /** @type {import('@playwright/test').ElectronApplication} */
   let electronApp;
@@ -49,7 +67,7 @@ test.describe('DineForge POS admin features', () => {
     await window.getByRole('button', { name: 'Start blank' }).click();
     await window.locator('.role-btn[data-role="admin"]').click();
     await window.getByRole('button', { name: 'Sign In' }).click();
-    await expect(window.getByRole('button', { name: 'New Order' })).toBeVisible();
+    await waitForBootComplete(window);
 
     apiBase = await window.evaluate(() => window.dineforge.getApiBase());
     const token = await window.evaluate(() => JSON.parse(sessionStorage.getItem('dineforge_session')).token);
@@ -97,12 +115,7 @@ test.describe('DineForge POS admin features', () => {
     // boot(), which deliberately skips refreshing the Admin view).
     await window.reload();
     await window.waitForLoadState('domcontentloaded');
-    // domcontentloaded fires once the DOM is parsed, well before app.js's
-    // async boot() finishes fetching state and wiring up nav click
-    // listeners - clicking "Admin" too early is a genuine no-op (dispatched
-    // into a button with no listener yet), not just a slow click. Wait for
-    // a boot-complete signal first.
-    await expect(window.getByRole('button', { name: 'New Order' })).toBeVisible();
+    await waitForBootComplete(window);
   });
 
   test.afterAll(async () => {
@@ -133,7 +146,7 @@ test.describe('DineForge POS admin features', () => {
     await expect(historyRows).toHaveCount(1);
     await expect(historyRows).toContainText('paid');
 
-    await window.locator('#orderHistoryBox').getByRole('link', { name: 'View' }).click();
+    await window.locator('#orderHistoryBox a[data-view-order]').click();
     await expect(window.locator('#activeModal')).toContainText('E2E Burger');
     await expect(window.locator('#activeModal')).toContainText('$9.99');
     await window.locator('#orderDetailClose').click();
@@ -199,6 +212,13 @@ test.describe('DineForge POS admin features', () => {
       // whichever view isn't currently active).
       await window.reload();
       await window.waitForLoadState('domcontentloaded');
+      await waitForBootComplete(window);
+      // pos.js defaults to the alphabetically-first category (MenuService
+      // orders by sort_order then name) - the previous test's Excel import
+      // created "Burgers", which now sorts ahead of "E2E Category", so it's
+      // no longer the one shown by default. Select it explicitly instead of
+      // relying on which category happens to be active.
+      await window.getByRole('button', { name: 'E2E Category' }).click();
       await expect(window.getByRole('button', { name: 'E2E Burger' }).locator('img.item-card-image')).toBeVisible();
 
       await window.getByRole('button', { name: 'Admin', exact: true }).click();
